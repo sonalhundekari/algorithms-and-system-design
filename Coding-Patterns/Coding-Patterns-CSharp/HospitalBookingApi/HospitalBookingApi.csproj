@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Separate project because this one is an ASP.NET Core minimal API using
+       top-level statements: it needs the Web SDK and owns its own entry point,
+       so it cannot share the CodingPatterns console project. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CodingPatterns.HospitalBookingApi</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+</Project>

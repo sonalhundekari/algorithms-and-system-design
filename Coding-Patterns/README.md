@@ -5,22 +5,52 @@ Each problem has solutions in both **Python** and **C#**.
 
 ## 📁 Structure
 
+The two languages live in separate, independently runnable trees:
+
 ```
-interview-prep/
-├── 01_arrays_strings/
-├── 02_trees/
-├── 03_graphs/
-├── 04_dynamic_programming/
-├── 05_intervals_greedy/
-├── 06_stack_queue/
-├── 07_binary_search/
-└── 08_linked_lists/
+Coding-Patterns/
+├── Coding-Patterns-CSharp/     # dotnet solution — see its README
+│   ├── CodingPatterns.sln
+│   ├── CodingPatterns/         # all pattern solutions, one console app
+│   ├── HospitalBookingApi/     # ASP.NET Core minimal API
+│   └── RedisRateLimiterDemo/   # needs a live Redis
+└── Coding-Patterns-Python/     # scripts + run.py launcher — see its README
+    └── run.py
 ```
 
-Each folder contains:
+Each language tree has the same pattern folders:
+
+```
+01_arrays_strings/   04_dynamic_programming/   07_binary_search/
+02_trees/            05_greedy/                08_linked_lists/
+03_graphs/           06_stack_queue/           09_concurrency/
+```
+
+and each of those folders contains:
 - `README.md` — pattern overview + problem list
-- `<problem_name>.py` — Python solution with explanation
-- `<problem_name>.cs` — C# solution with explanation
+- the solutions for that pattern, each with its own tests/demo built in
+
+## ▶️ Running
+
+Every solution is executable, and each tree has one command that runs all of them:
+
+```bash
+# C#
+cd Coding-Patterns-CSharp/CodingPatterns
+dotnet run -- --list     # what's available
+dotnet run -- TwoSum     # run one
+dotnet run -- --all      # run everything
+
+# Python
+cd Coding-Patterns-Python
+python3 run.py --list    # what's available
+python3 run.py two_sum   # run one
+python3 run.py --all     # run everything
+```
+
+See [Coding-Patterns-CSharp/README.md](Coding-Patterns-CSharp/README.md) and
+[Coding-Patterns-Python/README.md](Coding-Patterns-Python/README.md) for details,
+including how to add a new problem.
 
 ## 🗂️ Problem Index
 

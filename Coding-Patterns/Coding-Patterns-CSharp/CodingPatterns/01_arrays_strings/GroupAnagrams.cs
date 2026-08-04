@@ -1,0 +1,94 @@
+// Group Anagrams
+// Pattern: HashMap with counting key
+//
+// Original approach: sort each word → O(k log k) per word
+// Optimized:         count 26 chars → O(k) per word
+//
+// The key insight: two anagrams have identical character frequencies.
+// A 26-int fingerprint uniquely identifies an anagram class,
+// and building it is a single linear pass — no sort needed.
+//
+// Time: O(n * k)  vs O(n * k log k)   (n = # words, k = avg word length)
+// Space: O(n * k)
+//
+// Why this matters:
+// - For long words (k=100), sorting is ~7x slower per word
+// - Sorting allocates a new char[]; counting uses a fixed 26-int buffer
+// - Cache-friendly: sequential scan of the string vs. sort's random access
+
+namespace CodingPatterns.ArraysStrings;
+
+public class GroupAnagrams
+{
+    public IList<IList<string>> Solve(string[] strs)
+    {
+        var groups = new Dictionary<string, List<string>>();
+        Span<int> counts = stackalloc int[26];  // no heap allocation per word
+
+        foreach (var word in strs)
+        {
+            counts.Clear();
+            foreach (var c in word)
+                counts[c - 'a']++;
+
+            // Build a compact key from the count array.
+            // Using a delimited string is simple and unambiguous.
+            var key = string.Create(52, counts.ToArray(), (span, cs) =>
+            {
+                for (int i = 0; i < 26; i++)
+                {
+                    span[i * 2] = (char)('a' + i);
+                    span[i * 2 + 1] = (char)cs[i];
+                }
+            });
+
+            if (!groups.TryGetValue(key, out var list))
+            {
+                list = new List<string>();
+                groups[key] = list;
+            }
+            list.Add(word);
+        }
+        return groups.Values.Cast<IList<string>>().ToList();
+    }
+
+    // Alternative: even simpler key using a tuple-like string
+    public IList<IList<string>> SolveSimple(string[] strs)
+    {
+        // Dictionary to store anagrams groups by character count signature
+        Dictionary<string, List<string>> map = new Dictionary<string, List<string>>();
+        
+        foreach (string s in strs) {
+            // Initialize the character count
+            int[] count = new int[26];
+            foreach (char c in s) {
+                count[c - 'a']++;
+            }
+            
+            // Create a signature string from the character count
+            string key = string.Join(",", count);
+            
+            // If the signature is not in the map, add it
+            if (!map.ContainsKey(key)) {
+                map[key] = new List<string>();
+            }
+            
+            // Add the original string to the correct anagram group
+            map[key].Add(s);
+        }
+        
+        // Convert the map values to a list of lists
+        return new List<IList<string>>(map.Values);
+    }
+
+    public static void Run()
+    {
+        var sol = new GroupAnagrams();
+        var result = sol.Solve(new[] { "eat", "tea", "tan", "ate", "nat", "bat" });
+        foreach (var g in result) 
+            Console.WriteLine(string.Join(", ", g));
+    }
+}
+
+
+

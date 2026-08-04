@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CodingPatterns</RootNamespace>
+    <AssemblyName>CodingPatterns</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- Solution files are interview scratch code: unused locals and the like
+         are expected and should not drown out real diagnostics. -->
+    <NoWarn>$(NoWarn);CS0105;CS0168;CS0219;CS8321;CS8632</NoWarn>
+  </PropertyGroup>
+
+</Project>
