@@ -81,9 +81,11 @@ including how to add a new problem.
 | 23 | Stack/Queue | Daily Temperatures | Medium |
 | 24 | Stack/Queue | Min Stack | Medium |
 | 25 | Stack/Queue | Largest Rectangle in Histogram | Hard |
-| 26 | Binary Search | Search in Rotated Sorted Array | Medium |
-| 27 | Binary Search | Find Minimum in Rotated Sorted Array | Medium |
-| 28 | Binary Search | Koko Eating Bananas | Medium |
-| 29 | Linked Lists | Merge Two Sorted Lists | Easy |
-| 30 | Linked Lists | Reverse Linked List | Easy |
-| 31 | Linked Lists | LRU Cache | Medium |
+| 26 | Stack/Queue | Decode String | Medium |
+| 27 | Binary Search | Search in Rotated Sorted Array | Medium |
+| 28 | Binary Search | Find Minimum in Rotated Sorted Array | Medium |
+| 29 | Binary Search | Koko Eating Bananas | Medium |
+| 30 | Binary Search | Leaderboard (design) | Hard |
+| 31 | Linked Lists | Merge Two Sorted Lists | Easy |
+| 32 | Linked Lists | Reverse Linked List | Easy |
+| 33 | Linked Lists | LRU Cache | Medium |
