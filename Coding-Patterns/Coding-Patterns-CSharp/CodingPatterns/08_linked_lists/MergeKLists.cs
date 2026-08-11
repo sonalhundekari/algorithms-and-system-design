@@ -99,20 +99,40 @@ public class MergeKLists<T> where T : IComparable<T> {
 public static class MergeKListsDemo
 {
     public static void Run() {
-        var mergeKLists = new MergeKLists<int>();
+        var solver = new MergeKLists<int>();
 
-        // Example: Merge 3 sorted linked lists
-        ListNode<int> list1 = new(1, new(4, new(5)));
-        ListNode<int> list2 = new(1, new(3, new(4)));
-        ListNode<int> list3 = new(2, new(6));
+        // Each solver rewires the input nodes, so every run gets fresh lists.
+        ListNode<int>[] Build(params int[][] values) =>
+            values.Select(FromArray).ToArray();
 
-        ListNode<int>[] lists = { list1, list2, list3 };
-        ListNode<int> mergedList = mergeKLists.Merge(lists);
+        var inputs = new[] {
+            new[] { new[] { 1, 4, 5 }, new[] { 1, 3, 4 }, new[] { 2, 6 } },  // the example
+            Array.Empty<int[]>(),                                            // k == 0
+            new[] { Array.Empty<int>() },                                    // one empty list
+            new[] { Array.Empty<int>(), new[] { 1 }, Array.Empty<int>() },   // empties around content
+            new[] { new[] { 2, 2 }, new[] { 2 }, new[] { 2, 2, 2 } },        // all ties
+            new[] { new[] { -10000, 0 }, new[] { -5, 10000 } },              // value range edges
+        };
 
-        // Print the merged linked list
-        while (mergedList != null) {
-            Console.Write(mergedList.val + " ");
-            mergedList = mergedList.next;
+        foreach (var values in inputs) {
+            var heap = ToArray(solver.Merge(Build(values)));
+            var divide = ToArray(solver.MergeKListsRecursive(Build(values)));
+            Console.WriteLine($"[{string.Join(" ", heap)}]  heap == divide&conquer: {heap.SequenceEqual(divide)}");
         }
+    }
+
+    private static ListNode<int> FromArray(int[] values) {
+        var dummy = new ListNode<int>();
+        var tail = dummy;
+        foreach (var v in values)
+            tail = tail.next = new ListNode<int>(v);
+        return dummy.next;
+    }
+
+    private static List<int> ToArray(ListNode<int> head) {
+        var values = new List<int>();
+        for (var node = head; node != null; node = node.next)
+            values.Add(node.val);
+        return values;
     }
 }

@@ -5,14 +5,17 @@
 - **Dummy head node** — simplifies edge cases when head itself may change
 - **Iterative reversal** — prev, curr, next pointer dance
 - **HashMap for O(1) access** — LRU Cache, clone with random pointer
+- **Min-heap over k heads** — k-way merge in O(N log k) instead of O(N·k)
 
 ## Problems
 
 | Problem | LeetCode | Difficulty | Technique |
 |---------|----------|------------|-----------|
 | Merge Two Sorted Lists | #21 | Easy | Dummy head + two pointers |
+| Merge k Sorted Lists | #23 | Hard | Min-heap of heads / divide & conquer |
 | Reverse Linked List | #206 | Easy | Iterative / recursive reversal |
 | LRU Cache | #146 | Medium | HashMap + doubly linked list |
+| Happy Number | #202 | Easy | Floyd's cycle detection on an implicit list |
 
 ## Pattern Cheat Sheet
 
@@ -32,4 +35,30 @@ dummy.next = head
 curr = dummy
 # ... manipulate ...
 return dummy.next
+```
+
+```csharp
+// Floyd's cycle detection — works on any "each node has one successor"
+// sequence, even when there is no real list (see Happy Number).
+int slow = start, fast = Step(start);
+while (fast != target && slow != fast) {
+    slow = Step(slow);
+    fast = Step(Step(fast));
+}
+return fast == target;  // target reached, or the pointers met inside a cycle
+```
+
+```csharp
+// k-way merge: heap holds one node per list, never all N.
+// The (value, order) key breaks ties so equal values stay stable.
+var pq = new PriorityQueue<ListNode, (int val, int order)>();
+foreach (var head in lists.Where(n => n != null))
+    pq.Enqueue(head, (head.val, order++));
+
+while (pq.Count > 0) {
+    var node = pq.Dequeue();
+    tail = tail.next = node;
+    if (node.next != null)
+        pq.Enqueue(node.next, (node.next.val, order++));
+}
 ```

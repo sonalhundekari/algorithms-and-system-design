@@ -86,6 +86,10 @@ including how to add a new problem.
 | 28 | Binary Search | Find Minimum in Rotated Sorted Array | Medium |
 | 29 | Binary Search | Koko Eating Bananas | Medium |
 | 30 | Binary Search | Leaderboard (design) | Hard |
-| 31 | Linked Lists | Merge Two Sorted Lists | Easy |
-| 32 | Linked Lists | Reverse Linked List | Easy |
-| 33 | Linked Lists | LRU Cache | Medium |
+| 31 | Binary Search | Event Stream Count in Time Range (design) | Medium |
+| 32 | Linked Lists | Merge Two Sorted Lists | Easy |
+| 33 | Linked Lists | Merge k Sorted Lists | Hard |
+| 34 | Linked Lists | Reverse Linked List | Easy |
+| 35 | Linked Lists | LRU Cache | Medium |
+| 36 | Linked Lists | Happy Number | Easy |
+| 37 | Graphs | N-Queens / N-Queens II | Hard |
