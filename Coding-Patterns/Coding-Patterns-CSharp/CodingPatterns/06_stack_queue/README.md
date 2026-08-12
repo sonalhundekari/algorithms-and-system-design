@@ -9,6 +9,10 @@
 - **Frame = (accumulator, pending operator)** — a parser frame holds the value built so far plus the one operator still waiting for its operand; a nested sub-expression is then not a special case, it is an operand the same loop happens to compute
 - **Lazy deletion (tombstones)** — a heap can only address its root, so don't delete: mark dead and discard at pop. Each entry is pushed once and popped once, so it stays O(log n) amortized
 - **Epoch/generation stamp** — invalidate every stale copy of a key with one O(1) counter bump instead of n deletions; execute, cancel and supersede all become the same operation
+- **Keep the boundary, not the order** — an order statistic (median, k-th largest) depends on one position, so maintain the *split* around it with two heaps instead of a sorted list. A heap gives you one end cheaply and refuses to tell you anything else; that refusal is what makes insert O(log n)
+- **Push through the far side** — to add across a two-heap split, route every value in through one heap and out of it into the other, then rebalance. The ordering invariant then holds by construction (what leaves a heap *is* its extreme), so there is no comparison to invert and no empty-heap branch
+- **A bounded value domain beats a clever structure** — "0 ≤ num ≤ 100" or "|num| ≤ 10⁵" is a hint, not decoration: count occurrences per value and every order statistic becomes a prefix-sum query, O(log U) in the *domain* with memory independent of n, plus deletion and percentiles for free
+- **Let the input shape pick the interface** — a stream of commands wants a stateful object with per-command `Execute` and observable mid-flight state; a complete list wants a pure `Evaluate(list)` and collapses "what is the state right now?" into locals. Same algorithm, different public surface — confirm which one you were handed before designing either
 
 ## Problems
 
@@ -22,6 +26,9 @@
 | Math Interpreter with Function Definitions | interpreter classic | Medium (Hard follow-up) | Command state machine; compile each body to an affine map |
 | Priority Task Executor | design classic | Medium (Hard follow-ups) | Heap + lazy deletion; epoch stamp for the skip rule |
 | String-Command Calculator | parser classic | Easy (Medium follow-up) | Tokenize; stack of (accumulator, pending op) frames |
+| SnowCal Language Interpreter | interpreter classic | Medium | Same language as Math Interpreter, handed as a whole list: one pass, pure `Evaluate`, one nullable open frame instead of a stack |
+| Find Median from Data Stream | #295 | Hard | Two heaps split at the median; Fenwick over the value domain for the bounded-range follow-up |
+| Sliding Window Median | #480 | Hard | Same two heaps + lazy deletion — a window forces removal, which a heap cannot do directly |
 
 ## Pattern Cheat Sheet
 
@@ -119,6 +126,44 @@ for tok in tokens:
 # cache it and a repeated sub-expression costs O(1). Both preconditions bite:
 # inheriting the seed makes MULT (expr) compute acc*(a*acc+b), which is quadratic,
 # and integer DIV is not linear. Either one, and you are back to interpreting.
+
+# Median of a stream: don't keep the ORDER, keep the SPLIT. Two heaps put both
+# candidate middles at a root, so findMedian is O(1) and addNum is one sift.
+#
+#   lo = max-heap of the smaller half     hi = min-heap of the larger half
+#   invariants:  max(lo) <= min(hi)  and  len(lo) - len(hi) in {0, 1}
+#
+# Route every value THROUGH lo and out into hi: what leaves lo is lo's maximum,
+# so it is >= everything left behind and the ordering invariant cannot break.
+# No "is num <= lo[0]?" to get backwards, no empty-heap special case.
+def add_num(num):
+    heapq.heappush(lo, -num)                          # lo is negated: heapq is min-only
+    heapq.heappush(hi, -heapq.heappop(lo))
+    if len(hi) > len(lo):                             # lo holds the odd one out
+        heapq.heappush(lo, -heapq.heappop(hi))
+
+def find_median():
+    return -lo[0] if len(lo) > len(hi) else (-lo[0] + hi[0]) / 2.0
+
+# The three follow-ups, and each one changes the structure:
+#   "values are in [0, 100]"  -> counts[101]; add is O(1), median is a 101-bucket
+#                                scan. Fenwick generalises it: O(log U), memory
+#                                O(U) INDEPENDENT of n, removal and percentiles free
+#   "support removeNum"       -> heaps can't delete an interior element. Lazy
+#                                deletion (delayed counts + separate LOGICAL sizes,
+#                                pruned at the root) or the Fenwick tree
+#   "a billion numbers"       -> exact medians need O(n): unlike a mean or a max,
+#                                any value can still turn out to be the middle one.
+#                                Bound the domain, or approximate (t-digest, P^2)
+#
+# Sliding-window median is the removal follow-up wearing a hat: insert nums[i],
+# erase nums[i-k], read the median. Sizes are counted separately from heap
+# contents because the heaps are full of corpses.
+def erase(num):                    # mark dead; only drop it if it is at a root
+    delayed[num] += 1
+    if num <= lo[0]: lo_size -= 1; prune(lo) if num == lo[0] else None
+    else:            hi_size -= 1; prune(hi) if num == hi[0] else None
+    rebalance()                    # uses LOGICAL sizes, and prunes after moving a root
 
 # Priority queue where the same key can be added many times but runs ONCE:
 # do NOT try to remove the dead copies. A heap can only address its root, so

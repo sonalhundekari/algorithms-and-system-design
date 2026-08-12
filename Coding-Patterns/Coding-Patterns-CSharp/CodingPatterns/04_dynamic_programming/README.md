@@ -9,6 +9,8 @@
 - **Binary search the answer** — when feasibility is monotone, optimize → decide
 - **DP table + outer sweep** — tabulate once for *all* subproblems, then minimize over a free parameter; prove the parameter's range is bounded
 - **Sort + binary-searched predecessor** — order intervals by end time so "what's still available" is a prefix; one binary search per item replaces a scan
+- **Two pointers + a signed balance** — when two sequences advance at different rates, carry "how far ahead one side is" as a third state axis; only the side that is behind may move
+- **Read the constraint before building the table** — a "pick exactly one kind" rule collapses a knapsack shape into a closed form per candidate plus one linear scan
 
 ## Problems
 
@@ -22,6 +24,8 @@
 | Find Minimum Time to Finish All Jobs | #1723 | Hard | Binary search + pruned DFS; subset DP O(k·3^n) |
 | Min Coins to Pay with Change Allowed | — | Medium | Coin-change DP + bounded sweep over the overpayment |
 | Max Credits with K Classes | #1751 (#1235 uncapped) | Hard | Weighted interval scheduling + a count axis |
+| Original String Exists (Two Encoded Strings) | #2060 | Hard | Top-down DP on (i, j, diff); wildcards absorb the other side's letters |
+| Single Query Type, Max Revenue in K Minutes | — | Easy (Hard if you write the knapsack) | Closed form `(k / d) * r` + one scan; unbounded knapsack is only the follow-up |
 
 ## Pattern Cheat Sheet
 
@@ -108,4 +112,57 @@ for _ in range(k):                                         # roll the count axis
 # K = 0 -> 0; K >= N -> clamp to N; all overlapping -> the single best credit.
 # Drop the K axis and it is LC 1235 (1D). Drop the *credits* and it stops being
 # a DP at all -- max COUNT of events is the greedy min-heap-by-end-day, LC 1353.
+
+# TWO ENCODED STRINGS, ONE ORIGINAL (#2060). Digits replace hidden substrings by
+# their LENGTH, so a run of digits is ambiguous ("123" = 123, 12+3, 1+23, 1+2+3)
+# and every hidden segment is a WILDCARD that swallows the other side's letters.
+# State: (i, j, diff), diff = characters s1 has committed minus s2's. Only the
+# side that is BEHIND may advance:
+def solve(i, j, diff):                       # memo on all THREE coordinates
+    if i == len(s1) and j == len(s2): return diff == 0
+    if i < len(s1) and s1[i].isdigit():      # extend the number one digit at a
+        v = 0                                # time -- that enumerates the splits
+        for k in range(i, min(i + 3, len(s1))):
+            if not s1[k].isdigit(): break
+            v = v * 10 + int(s1[k])
+            if solve(k + 1, j, diff + v): return True
+    elif j < len(s2) and s2[j].isdigit():    # mirror image, diff goes down
+        ...
+    elif diff == 0:                          # same index of the original ->
+        return s1[i] == s2[j] and solve(i + 1, j + 1, 0)      # must be EQUAL
+    elif diff > 0:                           # s1's wildcard eats s2's letter,
+        return solve(i, j + 1, diff - 1)     # whatever it is -- NO comparison
+    else:
+        return solve(i + 1, j, diff + 1)
+    return False
+
+# "l123e" vs "44" -> true: 4+4 hidden chars absorb 'l', 'e' and 1+2+3 in between.
+# Traps: comparing letters while diff != 0 (they are being eaten, not matched);
+# pairing numbers against numbers instead of adding them to a balance; memoising
+# on (i, j) alone. "At most 3 digits in a row" is the bound that matters: no
+# number exceeds 999, and a run is only entered with diff already toward 0, so
+# |diff| <= 999 and the table is 41 x 41 x 2001, not unbounded.
+
+# THE KNAPSACK THAT ISN'T -- pick ONE query type, run it back-to-back for k
+# minutes. A time budget with a per-run cost and a per-run revenue screams
+# unbounded knapsack, but "only a single type may be selected" kills both
+# decisions a knapsack makes (which item next, how many of it), so every
+# candidate has a closed form and the answer is one scan:
+best = max(((k // d) * r, -i) for i, (d, r) in enumerate(types))   # -i: ties -> lowest index
+# O(n) / O(1) against the DP's O(n*k) / O(k) -- and k is minutes, a VALUE, not a
+# size, so the DP is pseudo-polynomial on an input three numbers wide.
+#
+# RANK BY NO PROXY: floor() is not monotone in any single column.
+#   k = 10, types = [(6,10), (5,6), (1,1)]
+#   best per run -> (6,10) = 10   best density -> (6,10) = 10   shortest -> (1,1) = 10
+#   the answer is (5,6) twice = 12. The wasted tail k % d is what breaks every
+#   greedy, and the size of that tail depends on the candidate.
+#
+# Edges: d > k -> 0 runs, 0 revenue (a losing candidate, not an error); d == 0 ->
+# unbounded, reject and ask; r < 0 -> the best count is 0 if idling is allowed;
+# (k // 1) * r overflows 32 bits. Follow-ups: allow a MIX and it finally IS
+# unbounded knapsack, dp[t] = max(dp[t-1], max(dp[t-d] + r)) -- strictly better
+# than the single-type answer (14 > 12 above: one (6,10) plus four (1,1)), which
+# is therefore a lower bound. Allow PARTIAL runs and the floor vanishes, so the
+# density greedy is at last correct: k * max(r / d).
 ```

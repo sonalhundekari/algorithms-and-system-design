@@ -7,9 +7,11 @@
 - **Sliding Window** — variable or fixed window that expands/shrinks
 - **Sorting** — enables grouping, binary search, or greedy approaches
 - **Anchor at the changed cell** — after a single edit, only lines *through* that cell can be new; probing 4 axes from it is O(1) where a full-board rescan is O(m·n) **and answers a weaker question** ("a win exists" ≠ "this move won")
+- **Validate a final state by peeling the last move** — "is this reachable?" needs no search: check the counts, then ask whether *one* cell lies on **every** winning line, since the last move is one cell and it had to end the game. Removing marks can never *create* a line, so a line-free board with legal counts unwinds for free
 - **Inverted index** — when a query names no key, invert the map (`key → values` becomes `value → keys`) so an AND is a set intersection and an OR a union; cost then tracks the *rarest* term instead of the corpus size
 - **Intervals instead of marks** — when each hit paints a `±k` window, painting costs `O(n·k)` and rewrites the same cells; emit `[i-k, i+k]` and merge into the previous interval instead for `O(n)`. Hits are found in ascending order, so the intervals arrive pre-sorted — *there is no sort*
 - **Ring buffer + commit index for streaming context** — trailing context is an integer (`emitThrough`), leading context is a `k`-deep queue, and duplicates are killed by a monotone `nextEmit` counter rather than per-line flags: `O(k)` memory, `O(k)` latency
+- **Match state is one integer** — "does pattern P end here?" is answered by the *matched prefix length*, and nothing else. Streaming exact-match reduces to advancing that integer per element; `j = fail[j-1]` on both mismatch **and** completion (reset-to-0 on completion silently drops overlapping occurrences). One integer per pattern is the flat case; a shared trie with suffix links is the same idea merged (Aho-Corasick)
 
 ## Problems
 
@@ -22,12 +24,14 @@
 | Group Anagrams | #49 | Medium | HashMap + sort key |
 | Rotating the Box | #1861 | Medium | Two pointers (gravity) + index remap |
 | Connect Four — Can Play Win | — | Medium | 4-axis two-sided run count anchored at the placed cell |
+| Valid Tic-Tac-Toe State (N×N, K in a row) | #794 (extended) | Medium (Hard extension) | Count invariants + intersect the winner's K-windows via run cores |
 | RecordCollection Sort Colors | #75 (variant) | Medium | Dutch National Flag, via a GetColor/Swap object API |
 | Longest Substring Without Repeating Characters | #3 | Medium | Sliding window |
 | Find All Anagrams in a String | #438 | Medium | Fixed-size sliding window + `matches` counter |
 | Filter System with Dynamic Blacklist | design classic | Easy (Medium follow-up) | Two HashSets; emit on the edges of `seen && !blocked` |
 | Document Store with Predicate Query | design classic | Easy (Medium follow-ups) | Dictionary of HashSets + sum-of-products predicate + inverted index |
 | Grep With Context Lines | design classic | Medium (4 parts) | Mark array → ring buffer (streaming) → merged intervals → map-reduce over chunks |
+| Recipe as Contiguous Ingredient Subsequence | #28 (multi-pattern variant) | Medium (2 follow-ups) | KMP → prefix rolling hash → two pointers (O(1) space) → per-recipe match state → Aho-Corasick |
 | Minimum Window Substring | #76 | Hard | Sliding window + frequency map |
 
 ## Pattern Cheat Sheet
@@ -239,4 +243,81 @@ def wins(board, x, y, who, K=4):
 # O(1) per move (<= 4*2*(K-1) cells), vs O(m*n) for a rescan that answers the
 # WEAKER question "does a win exist". Gravity variant: the caller gives a COLUMN
 # and the row is derived (lowest empty), so keep a per-column height for O(1).
+
+# Exact CONTIGUOUS match of a pattern list inside a text list ("is this recipe a
+# contiguous run of these ingredients?"). Substring search with str for char --
+# NOT a subsequence and NOT a multiset containment. Duplicates in the text are
+# the whole difficulty, so any HashSet-of-ingredients answer is a wrong question.
+#
+# O(1) EXTRA SPACE (no failure array): two pointers, and ONE line matters --
+i = j = 0
+while i < n:
+    if text[i] == pat[j]:
+        i += 1; j += 1
+        if j == m: return i - m
+    else:
+        i = i - j + 1; j = 0      # BACK THE TEXT UP to start+1. `i += 1` here is
+        # the bug that looks like an optimization: text [a,a,a,b], pat [a,a,b] --
+        # 2 matched, 3rd failed, resuming at index 3 skips the LIVE window at 1.
+# O(n*m) worst case, and the backup is exactly what KMP precomputes away.
+#
+# KMP -- the text pointer NEVER moves backwards. fail[i] = longest proper
+# prefix of pat[0..i] that is also a suffix. Built by running pat against ITSELF
+# with the identical loop:
+k = 0
+for i in range(1, m):
+    while k > 0 and pat[i] != pat[k]: k = fail[k-1]
+    if pat[i] == pat[k]: k += 1
+    fail[i] = k
+# Search is the same three lines with `text[i]` in place of `pat[i]`.
+# NOT O(1) space -- fail is O(m). The two follow-ups genuinely conflict; the
+# resolution (Two-Way / Galil-Seiferas, what glibc memmem uses) is worth NAMING
+# and not worth writing.
+#
+# STREAMING, many patterns: state per pattern is ONE INTEGER, the matched prefix
+# length. Ingredients are dropped as they arrive.
+for r, pat in enumerate(pats):
+    j = state[r]
+    while j > 0 and x != pat[j]: j = fail[r][j-1]
+    if x == pat[j]: j += 1
+    if j == m: emit(r, pos - m + 1); j = fail[r][j-1]   # NOT j = 0 -- resetting
+    state[r] = j    # drops OVERLAPPING hits: [a,b,a] in a b a b a matches 0 AND 2
+# O(R) per element. Aho-Corasick merges the R chains into one trie + suffix links
+# for O(1) per element: build trie, BFS the links (a link always points shallower,
+# so it is final by the time you need it), and give each node an OUTPUT LINK to
+# the nearest terminal ancestor -- that is what lets [sugar,egg] and [egg] both
+# report at the same position. A node owns a LIST of pattern ids (duplicates).
+# Add/remove patterns live => stay with the flat version; adding one pattern
+# invalidates suffix links across the whole trie.
+#
+# MULTI-PATTERN via ROLLING HASH: prefix hashes make any window O(1) --
+#   pre[i+1] = pre[i]*B + id(text[i]);  hash(i,L) = pre[i+L] - pre[i]*B^L
+# Bucket patterns by LENGTH, sweep windows once per distinct length, look up.
+# O(n*D + total), D = distinct lengths -- NOT O(n + total); that is Aho-Corasick.
+# Non-negotiable: mod 2^61-1 (Mersenne => reduction is shifts), RANDOM base (a
+# fixed B makes collisions constructible), and VERIFY the hit element-by-element
+# so a collision costs time instead of correctness.
+#
+# Which to reach for is decided by which side is stable:
+#   patterns stable, text changes  -> Aho-Corasick (preprocess patterns)
+#   text stable, patterns change   -> suffix automaton over the text: O(n) build,
+#                                     then O(m) per query with NO n dependence
+
+# IS THIS FINISHED BOARD REACHABLE? (Valid Tic-Tac-Toe, N x N, K in a row)
+#   (a) x == o or x == o + 1              X moves first
+#   (b) at most one player has a K-line
+#   (c) the winner is the LAST MOVER      X wins => x == o+1;  O wins => x == o
+#   (d) ONE cell lies on ALL the winner's lines   <- the whole extension
+# (a)-(c) are the LeetCode 794 answer and are COMPLETE at 3x3 only. Larger boards
+# break them: two DISJOINT X triples pass every count check and cannot exist,
+# because whichever X went last, the other triple had already ended the game.
+# (d) is why: the last move is one cell, so deleting it must kill every line.
+# Per maximal run of length L >= K along an axis, all its K-windows share exactly
+#     run[L-K : K]        non-empty iff L <= 2K-1
+# so intersect those cores over the 4 axes and stop when the intersection empties.
+#   L == K     any cell of the run could be last
+#   L == 2K-1  ONLY the middle cell        (5 in a row at K=3 is legal)
+#   L >= 2K    EMPTY -> the board is a bug (6 in a row at K=3 is not)
+# O(N^2), no search: removing a mark can never CREATE a line, so any line-free
+# board with legal counts peels back to empty one mark at a time.
 ```

@@ -7,6 +7,7 @@
 - **Top-down (memoization)** — recursive + cache; easier to reason about
 - **DP table + outer sweep** — tabulate once for *all* subproblems, then minimize over a free parameter; prove the parameter's range is bounded
 - **Sort + binary-searched predecessor** — order intervals by end time so "what's still available" is a prefix; one `bisect` per item replaces a scan
+- **Read the constraint before building the table** — a "pick exactly one kind" rule collapses a knapsack shape into a closed form per candidate plus one linear scan
 
 ## Problems
 
@@ -19,6 +20,7 @@
 | House Robber | #198 | Medium | 1D DP |
 | Min Coins to Pay with Change Allowed | — | Medium | Coin-change DP + bounded sweep over the overpayment |
 | Max Credits with K Classes | #1751 (#1235 uncapped) | Hard | Weighted interval scheduling + a count axis |
+| Single Query Type, Max Revenue in K Minutes | — | Easy (Hard if you write the knapsack) | Closed form `(k // d) * r` + one scan; unbounded knapsack is only the follow-up |
 
 ## Pattern Cheat Sheet
 
@@ -78,4 +80,27 @@ for _ in range(k):                                         # roll the count axis
 # K = 0 -> 0; K >= N -> clamp to N; all overlapping -> the single best credit.
 # Drop the K axis and it is LC 1235 (1D). Drop the *credits* and it stops being
 # a DP at all -- max COUNT of events is the greedy min-heap-by-end-day, LC 1353.
+
+# THE KNAPSACK THAT ISN'T -- pick ONE query type, run it back-to-back for k
+# minutes. A time budget with a per-run cost and a per-run revenue screams
+# unbounded knapsack, but "only a single type may be selected" kills both
+# decisions a knapsack makes (which item next, how many of it), so every
+# candidate has a closed form and the answer is one scan:
+best = max(((k // d) * r, -i) for i, (d, r) in enumerate(types))   # -i: ties -> lowest index
+# O(n) / O(1) against the DP's O(n*k) / O(k) -- and k is minutes, a VALUE, not a
+# size, so the DP is pseudo-polynomial on an input three numbers wide.
+#
+# RANK BY NO PROXY: floor() is not monotone in any single column.
+#   k = 10, types = [(6,10), (5,6), (1,1)]
+#   best per run -> (6,10) = 10   best density -> (6,10) = 10   shortest -> (1,1) = 10
+#   the answer is (5,6) twice = 12. The wasted tail k % d is what breaks every
+#   greedy, and the size of that tail depends on the candidate.
+#
+# Edges: d > k -> 0 runs, 0 revenue (a losing candidate, not an error); d == 0 ->
+# unbounded, reject and ask; r < 0 -> the best count is 0 if idling is allowed;
+# (k // 1) * r overflows 32 bits outside Python. Follow-ups: allow a MIX and it
+# finally IS unbounded knapsack, dp[t] = max(dp[t-1], max(dp[t-d] + r)) --
+# strictly better than the single-type answer (14 > 12 above: one (6,10) plus
+# four (1,1)), which is therefore a lower bound. Allow PARTIAL runs and the floor
+# vanishes, so the density greedy is at last correct: k * max(r / d).
 ```

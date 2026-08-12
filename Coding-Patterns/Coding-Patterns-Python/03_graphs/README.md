@@ -9,6 +9,11 @@
 - **Constraint keys, not board scans** — a conflict test is O(1) once each constraint has an index that is *constant along it* (`col`, `row - col`, `row + col`); mark on the way down, unmark on the way out
 - **Bitmask the frontier** — when the constraint sets are all "which columns are blocked in this row", they collapse to three ints, and shifting them by one row is the diagonal
 - **Halve the search by symmetry** — if a mirror/rotation maps solutions to solutions with no fixed points, explore one half and double, handling the self-symmetric case separately
+- **A budget on the path is part of the STATE** — "cheapest within k stops" is not shortest-path over cities, it is shortest-path over `(city, hops used)`; Dijkstra's "first pop is final" is a theorem about the former and is flatly false about the latter
+- **Bellman-Ford by ROUNDS, relaxed against a snapshot** — after round `r`, `dist[v]` is the cheapest cost using at most `r` edges; reading the *previous* round's list is the only thing stopping one round from chaining an entire path, and relaxing in place fails by returning a real route that overspends the budget
+- **Dominance, not a visited set** — when the state has a second dimension, discard a popped state only if an already-popped one beat it on *both* (cheaper AND no more hops); that is the 1-D case of Pareto labelling, which is where the multi-budget follow-up goes
+- **A hop bound makes negative cycles harmless** — round-bounded Bellman-Ford stays correct with negative weights because the walk length is capped; every Dijkstra variant dies. Know which of your solutions a sign change kills
+- **Positive weights ⇒ optimal path is simple ⇒ a budget past n − 1 is vacuous** — clamp `k` and the constrained problem collapses back to plain Dijkstra
 
 ## Problems
 
@@ -19,6 +24,8 @@
 | Word Ladder | #127 | Hard | BFS shortest path |
 | Clone Graph | #133 | Medium | DFS/BFS + HashMap |
 | N-Queens / N-Queens II | #51/#52 | Hard | Row-by-row backtracking with column & diagonal sets; bitmask + mirror symmetry for the count |
+| Wiki Shortest Clicks / crawl-all | #1971-like | Easy-Medium (Hard follow-up) | BFS over an API-only graph; visited-on-enqueue; threaded crawl with atomic dedupe + in-flight termination |
+| Cheapest Flights Within K Stops | #787 | Medium | Bellman-Ford over k+1 rounds against a snapshot; (city, hops) Dijkstra with hop-dominance; layered cost-relaxing BFS; layer table for the itinerary |
 
 ## Pattern Cheat Sheet
 
@@ -102,4 +109,47 @@ def total_n_queens(n):
 # Sanity anchors: n=1..9 -> 1, 0, 0, 2, 10, 4, 40, 92, 352.  n=2 and n=3 have NO
 # solution, so an empty answer is correct, not a bug. n=12 -> 14200 counts fine
 # and should never be asked to render.
+
+# CHEAPEST FLIGHTS WITHIN K STOPS (#787). "At most k stops" == at most k + 1
+# FLIGHTS -- write that once, at the top. The example is the whole problem:
+#   flights = [[0,1,100],[1,2,100],[2,0,100],[1,3,600],[2,3,200]], 0 -> 3
+#   k = 1 -> 700 (0->1->3)      k = 2 -> 400 (0->1->2->3)
+# The cheapest route and the shortest route are DIFFERENT routes, so no single
+# number per city can answer both. The state is (city, flights used):
+#   best[r][v] = min(best[r-1][v], min over u->v of best[r-1][u] + w)
+def find_cheapest_price(n, flights, src, dst, k):
+    best = [inf] * n; best[src] = 0
+    for _ in range(k + 1):                  # k + 1 rounds == k + 1 flights
+        previous = best[:]                  # THE SNAPSHOT. not optional.
+        for frm, to, price in flights:
+            best[to] = min(best[to], previous[frm] + price)
+        if best == previous: break          # converged; a generous k is then free
+    return -1 if best[dst] == inf else best[dst]
+# THE TRAP: relaxing in place. One shared list lets a round read what the same
+# round just wrote, so scanning 0->1 before 1->2 chains two flights in one round
+# and the answer above becomes 400 at k = 1. It is not garbage -- it is a REAL
+# route that overspends the budget, so it only ever under-reports, and whether it
+# does depends on the ORDER of the flight list. That is why it survives testing.
+#
+# WHY PLAIN DIJKSTRA IS WRONG: "first pop is final" is a theorem about a graph
+# whose only state is the node. Arriving at v cheaply in 3 hops does not dominate
+# arriving expensively in 1 -- if the budget dies at v, only the expensive one can
+# finish.   0-1->1-1->2-1->3  plus  0-5->2,  k = 1: answer is 0->2->3 = 6, and a
+# visited-set Dijkstra settles city 2 at cost 2 and returns -1. Not a worse
+# answer -- NO answer. The fix is DOMINANCE, not a bigger visited set: pop by
+# cost, keep min_hops[v] over popped states, skip a state whose hops >= it.
+#   heap of (cost, city, used); pop dst -> return; O(E*k log(E*k)), wins only on a
+#   big sparse graph with generous k, where it stops as soon as dst surfaces.
+# ITINERARY: two rows cannot rebuild it -- which LAYER settled a city is exactly
+# what they discard. Keep the (k+2) x n table with from[r][v] = predecessor or
+# CARRIED, then walk back alternating "step a layer" / "step a layer and a city".
+# It always lands on src, since best[r][src] = 0 and every price is >= 1.
+# FREE FACTS worth saying out loud: prices > 0 means an optimal route is SIMPLE,
+# so k >= n-1 is a vacuous constraint (clamp it, run plain Dijkstra); the same
+# rounds answer EVERY destination at once (one O(k*E) pass, O(1) per query);
+# and the round-bounded form is the only version here that survives NEGATIVE
+# prices, because a capped walk length cannot milk a negative cycle.
+# Adding a second budget (total flight TIME) adds a dimension -- best[r][v][t] if
+# it is small and discrete, otherwise Pareto labelling on (cost, time), of which
+# the hop-dominance rule above is the one-dimensional case.
 ```

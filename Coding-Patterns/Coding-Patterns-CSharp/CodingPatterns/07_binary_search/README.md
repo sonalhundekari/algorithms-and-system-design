@@ -11,6 +11,17 @@
   `upper_bound(end) - lower_bound(start)`. Pairing *left* on the start with *right* on
   the end is what makes both endpoints inclusive; any other pairing is silently wrong
   only when timestamps tie
+- **The predicate is the sorted thing** — nothing has to be an ordered array; it only has
+  to be `false…false true…true`. Check that the property you are searching for is the
+  monotone one: "line *i* is an `[Error]`" is, "line *i* is a `[Warn]`" is not, even
+  though the statement mentions both
+- **Gallop when the length is unknown** — a paged/streaming source gives you no `n`, so
+  there is no midpoint to compute. Probe 1, 2, 4, 8… to bracket the answer first, then
+  bisect the bracket: O(log *k*) in the **answer**, not in the input size. Fold
+  "past the end" into the predicate — it is a suffix too, so the union stays monotone
+- **`lo + (hi - lo) / 2`, always** — `(lo + hi) / 2` overflows to a negative index in
+  C#/Java. It never bites at interview sizes; write it right anyway, because the reader
+  who spots it cannot tell that you knew
 
 ## Problems
 
@@ -21,6 +32,7 @@
 | Koko Eating Bananas | #875 | Medium | Binary search on answer space |
 | Leaderboard | #1244† | Hard | Fenwick tree over the score domain + binary lifting |
 | Event Stream Count in Time Range | #981‡ | Medium | Per-type sorted list + `lower_bound`/`upper_bound` |
+| First Error Log (part 1 of [Service Failure Forensics](../03_graphs/ServiceFailureForensics.cs)) | #278-like | Easy | Lower-bound on a monotone tag predicate; galloping search when the log length is unknown |
 
 † A superset of LeetCode #1244, which only asks for `top(K)`. This version adds
 rank of an **arbitrary** player, "players near me" windows, and score-range counts —

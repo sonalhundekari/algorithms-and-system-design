@@ -5,6 +5,7 @@
 - **Map to a *set*, not a counter** — when the metric is *distinct* somethings, a counter is unfixable after the fact; the dedup must happen at ingest
 - **Size-K heap with an inverted comparator** — a min-heap of the K best must order by *worst first*, so every tie-break rule flips
 - **Derived predicate, emit on its edges** — when output is driven by several independent bits of state, name the predicate they combine into and report only when it *flips*; every "when does this fire?" case collapses into one edge check
+- **Validate a final state by peeling the last move** — "is this reachable?" needs no search: check the counts, then ask whether *one* cell lies on **every** winning line, since the last move is one cell and it had to end the game. Removing marks can never *create* a line, so a line-free board with legal counts unwinds for free
 - **Two Pointers** — left/right pointers moving toward each other
 - **Sliding Window** — variable or fixed window that expands/shrinks
 - **Sorting** — enables grouping, binary search, or greedy approaches
@@ -20,6 +21,7 @@
 | Longest Substring Without Repeating Characters | #3 | Medium | Sliding window |
 | Filter System with Dynamic Blacklist | design classic | Easy (Medium follow-up) | Two sets; emit on the edges of `seen and not blocked` |
 | Top-K Hashtags, Deduped Per User | #692 (variant) | Medium | `term -> set<user>` + size-K heap with an inverted comparator |
+| Valid Tic-Tac-Toe State (N×N, K in a row) | #794 (extended) | Medium (Hard extension) | Count invariants + intersect the winner's K-windows via run cores |
 | Minimum Window Substring | #76 | Hard | Sliding window + frequency map |
 
 ## Pattern Cheat Sheet
@@ -90,4 +92,22 @@ for tag, count in counts.items():
 # Watch `ranked[:k]` with k <= 0 -- a negative k slices from the END.
 # Scale-out: swap set -> HyperLogLog (fixed bytes/term, merges by max across
 # shards). Then cache the count, because estimating is O(registers), not O(1).
+
+# IS THIS FINISHED BOARD REACHABLE? (Valid Tic-Tac-Toe, N x N, K in a row)
+#   (a) x == o or x == o + 1              X moves first
+#   (b) at most one player has a K-line
+#   (c) the winner is the LAST MOVER      X wins => x == o+1;  O wins => x == o
+#   (d) ONE cell lies on ALL the winner's lines   <- the whole extension
+# (a)-(c) are the LeetCode 794 answer and are COMPLETE at 3x3 only. Larger boards
+# break them: two DISJOINT X triples pass every count check and cannot exist,
+# because whichever X went last, the other triple had already ended the game.
+# (d) is why: the last move is one cell, so deleting it must kill every line.
+# Per maximal run of length L >= K along an axis, all its K-windows share exactly
+#     run[L-K : K]        non-empty iff L <= 2K-1
+# so intersect those cores over the 4 axes and stop when the intersection empties.
+#   L == K     any cell of the run could be last
+#   L == 2K-1  ONLY the middle cell        (5 in a row at K=3 is legal)
+#   L >= 2K    EMPTY -> the board is a bug (6 in a row at K=3 is not)
+# O(N^2), no search: removing a mark can never CREATE a line, so any line-free
+# board with legal counts peels back to empty one mark at a time.
 ```
