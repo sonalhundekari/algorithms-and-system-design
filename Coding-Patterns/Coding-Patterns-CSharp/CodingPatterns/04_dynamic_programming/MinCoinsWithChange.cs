@@ -135,20 +135,20 @@ public class MinCoinsWithChange
             }
         }
 
-        return (bestTotal, bestPaid, Breakdown(bestPaid, denoms), Breakdown(bestPaid - n, denoms));
-    }
-
-    /// <summary>Which coins make up x, greedily (valid on a divisibility chain).</summary>
-    private static Dictionary<int, int> Breakdown(int x, int[] denoms)
-    {
-        var outCoins = new Dictionary<int, int>();
-        foreach (var coin in denoms.OrderByDescending(c => c))
+        // Which coins make up x, greedily (valid on a divisibility chain).
+        Dictionary<int, int> Breakdown(int x)
         {
-            if (x < coin) continue;
-            outCoins[coin] = x / coin;
-            x %= coin;
+            var outCoins = new Dictionary<int, int>();
+            foreach (var coin in denoms.OrderByDescending(c => c))
+            {
+                if (x < coin) continue;
+                outCoins[coin] = x / coin;
+                x %= coin;
+            }
+            return outCoins;
         }
-        return outCoins;
+
+        return (bestTotal, bestPaid, Breakdown(bestPaid), Breakdown(bestPaid - n));
     }
 
     public static void Run()

@@ -103,7 +103,26 @@ public static class CheapestFlightsWithinKStops
     /// </summary>
     public static int FindCheapestPrice(int n, int[][] flights, int src, int dst, int k)
     {
-        Validate(n, flights, src, dst, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+        if ((uint)dst >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(dst));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         if (src == dst)
             return 0;                                   // no flight needed, whatever k is
@@ -147,7 +166,24 @@ public static class CheapestFlightsWithinKStops
     /// </summary>
     public static int[] CheapestPricesFromSource(int n, int[][] flights, int src, int k)
     {
-        Validate(n, flights, src, src, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         var best = new int[n];
         Array.Fill(best, Infinity);
@@ -193,7 +229,26 @@ public static class CheapestFlightsWithinKStops
     /// </summary>
     public static int FindCheapestPriceLayered(int n, int[][] flights, int src, int dst, int k)
     {
-        Validate(n, flights, src, dst, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+        if ((uint)dst >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(dst));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         if (src == dst)
             return 0;
@@ -252,7 +307,26 @@ public static class CheapestFlightsWithinKStops
     /// </summary>
     public static int FindCheapestPriceDijkstra(int n, int[][] flights, int src, int dst, int k)
     {
-        Validate(n, flights, src, dst, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+        if ((uint)dst >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(dst));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         var adjacency = new List<(int To, int Price)>[n];
         for (int v = 0; v < n; v++)
@@ -300,7 +374,26 @@ public static class CheapestFlightsWithinKStops
     /// </summary>
     public static int FindCheapestPriceMemo(int n, int[][] flights, int src, int dst, int k)
     {
-        Validate(n, flights, src, dst, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+        if ((uint)dst >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(dst));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         var adjacency = new List<(int To, int Price)>[n];
         for (int v = 0; v < n; v++)
@@ -356,7 +449,26 @@ public static class CheapestFlightsWithinKStops
     {
         const int Carried = -1;
 
-        Validate(n, flights, src, dst, k);
+        ArgumentNullException.ThrowIfNull(flights);
+
+        if (n < 1)
+            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
+        if ((uint)src >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(src));
+        if ((uint)dst >= (uint)n)
+            throw new ArgumentOutOfRangeException(nameof(dst));
+
+        foreach (var flight in flights)
+        {
+            if (flight is not { Length: 3 })
+                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
+            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
+                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
+            if (flight[2] < 0)
+                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
+        }
 
         var best = new int[k + 2][];
         var from = new int[k + 2][];
@@ -403,32 +515,6 @@ public static class CheapestFlightsWithinKStops
 
         route.Reverse();
         return route.ToArray();
-    }
-
-    // ------------------------------------------------------------------ validation
-
-    private static void Validate(int n, int[][] flights, int src, int dst, int k)
-    {
-        ArgumentNullException.ThrowIfNull(flights);
-
-        if (n < 1)
-            throw new ArgumentOutOfRangeException(nameof(n), "need at least one city");
-        if (k < 0)
-            throw new ArgumentOutOfRangeException(nameof(k), "a negative stop budget is meaningless");
-        if ((uint)src >= (uint)n)
-            throw new ArgumentOutOfRangeException(nameof(src));
-        if ((uint)dst >= (uint)n)
-            throw new ArgumentOutOfRangeException(nameof(dst));
-
-        foreach (var flight in flights)
-        {
-            if (flight is not { Length: 3 })
-                throw new ArgumentException("every flight is [from, to, price]", nameof(flights));
-            if ((uint)flight[0] >= (uint)n || (uint)flight[1] >= (uint)n)
-                throw new ArgumentException($"flight [{flight[0]}, {flight[1]}] leaves the map", nameof(flights));
-            if (flight[2] < 0)
-                throw new ArgumentException("negative prices break every Dijkstra in this file", nameof(flights));
-        }
     }
 
     // ----------------------------------------------------- the two wrong versions

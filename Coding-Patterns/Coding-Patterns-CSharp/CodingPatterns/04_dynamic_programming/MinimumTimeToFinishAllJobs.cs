@@ -67,11 +67,66 @@ public static class MinimumTimeToFinishAllJobs
     /// </summary>
     public static int MinimumTime(int[] jobs, int k)
     {
-        Validate(jobs, k);
+        // Places desc[idx..] onto `loads` without any worker
+        // exceeding `limit`, recording each choice in
+        // `slot` (indexed by sorted position, not input position).
+        //
+        // The duplicate-load check is the symmetry pruning: workers are unlabeled,
+        // so two workers at the same load are the same worker as far as the search
+        // is concerned. It subsumes the usual "break on the first empty worker"
+        // special case -- every idle worker has load 0, so only one of them is ever
+        // tried.
+        static bool Place(int[] desc, int idx, int[] loads, int limit, int[] slot)
+        {
+            if (idx == desc.Length)
+                return true;
+
+            int job = desc[idx];
+
+            for (int i = 0; i < loads.Length; i++)
+            {
+                if (loads[i] + job > limit)
+                    continue;
+
+                bool duplicate = false;
+                for (int j = 0; j < i; j++)
+                    if (loads[j] == loads[i]) { duplicate = true; break; }
+                if (duplicate)
+                    continue;
+
+                loads[i] += job;
+                slot[idx] = i;
+                if (Place(desc, idx + 1, loads, limit, slot))
+                    return true;
+                loads[i] -= job;
+            }
+
+            return false;
+        }
+
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
         if (jobs.Length == 0)
             return 0;
 
-        var desc = Descending(jobs);
+        var desc = (int[])jobs.Clone();
+        Array.Sort(desc);
+        Array.Reverse(desc);
         int total = desc.Sum();
 
         // Two independent lower bounds; neither is reachable on its own.
@@ -94,56 +149,72 @@ public static class MinimumTimeToFinishAllJobs
     }
 
     /// <summary>
-    /// Places <c>desc[idx..]</c> onto <paramref name="loads"/> without any worker
-    /// exceeding <paramref name="limit"/>, recording each choice in
-    /// <paramref name="slot"/> (indexed by sorted position, not input position).
-    ///
-    /// The duplicate-load check is the symmetry pruning: workers are unlabeled,
-    /// so two workers at the same load are the same worker as far as the search
-    /// is concerned. It subsumes the usual "break on the first empty worker"
-    /// special case -- every idle worker has load 0, so only one of them is ever
-    /// tried.
-    /// </summary>
-    private static bool Place(int[] desc, int idx, int[] loads, int limit, int[] slot)
-    {
-        if (idx == desc.Length)
-            return true;
-
-        int job = desc[idx];
-
-        for (int i = 0; i < loads.Length; i++)
-        {
-            if (loads[i] + job > limit)
-                continue;
-
-            bool duplicate = false;
-            for (int j = 0; j < i; j++)
-                if (loads[j] == loads[i]) { duplicate = true; break; }
-            if (duplicate)
-                continue;
-
-            loads[i] += job;
-            slot[idx] = i;
-            if (Place(desc, idx + 1, loads, limit, slot))
-                return true;
-            loads[i] -= job;
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Whether <paramref name="jobs"/> can be finished within
     /// <paramref name="limit"/> using k workers -- the decision problem on its
     /// own, which is what an interviewer usually asks for next.
     /// </summary>
     public static bool CanFinishWithin(int[] jobs, int k, int limit)
     {
-        Validate(jobs, k);
+        // Places desc[idx..] onto `loads` without any worker
+        // exceeding `limit`, recording each choice in
+        // `slot` (indexed by sorted position, not input position).
+        //
+        // The duplicate-load check is the symmetry pruning: workers are unlabeled,
+        // so two workers at the same load are the same worker as far as the search
+        // is concerned. It subsumes the usual "break on the first empty worker"
+        // special case -- every idle worker has load 0, so only one of them is ever
+        // tried.
+        static bool Place(int[] desc, int idx, int[] loads, int limit, int[] slot)
+        {
+            if (idx == desc.Length)
+                return true;
+
+            int job = desc[idx];
+
+            for (int i = 0; i < loads.Length; i++)
+            {
+                if (loads[i] + job > limit)
+                    continue;
+
+                bool duplicate = false;
+                for (int j = 0; j < i; j++)
+                    if (loads[j] == loads[i]) { duplicate = true; break; }
+                if (duplicate)
+                    continue;
+
+                loads[i] += job;
+                slot[idx] = i;
+                if (Place(desc, idx + 1, loads, limit, slot))
+                    return true;
+                loads[i] -= job;
+            }
+
+            return false;
+        }
+
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
         if (jobs.Length == 0)
             return limit >= 0;
 
-        var desc = Descending(jobs);
+        var desc = (int[])jobs.Clone();
+        Array.Sort(desc);
+        Array.Reverse(desc);
         return Place(desc, 0, new int[Math.Min(k, desc.Length)], limit, new int[desc.Length]);
     }
 
@@ -155,7 +226,60 @@ public static class MinimumTimeToFinishAllJobs
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<int>> Assign(int[] jobs, int k)
     {
-        Validate(jobs, k);
+        // Places desc[idx..] onto `loads` without any worker
+        // exceeding `limit`, recording each choice in
+        // `slot` (indexed by sorted position, not input position).
+        //
+        // The duplicate-load check is the symmetry pruning: workers are unlabeled,
+        // so two workers at the same load are the same worker as far as the search
+        // is concerned. It subsumes the usual "break on the first empty worker"
+        // special case -- every idle worker has load 0, so only one of them is ever
+        // tried.
+        static bool Place(int[] desc, int idx, int[] loads, int limit, int[] slot)
+        {
+            if (idx == desc.Length)
+                return true;
+
+            int job = desc[idx];
+
+            for (int i = 0; i < loads.Length; i++)
+            {
+                if (loads[i] + job > limit)
+                    continue;
+
+                bool duplicate = false;
+                for (int j = 0; j < i; j++)
+                    if (loads[j] == loads[i]) { duplicate = true; break; }
+                if (duplicate)
+                    continue;
+
+                loads[i] += job;
+                slot[idx] = i;
+                if (Place(desc, idx + 1, loads, limit, slot))
+                    return true;
+                loads[i] -= job;
+            }
+
+            return false;
+        }
+
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
 
         var buckets = Enumerable.Range(0, k).Select(_ => new List<int>()).ToList();
         if (jobs.Length == 0)
@@ -196,43 +320,61 @@ public static class MinimumTimeToFinishAllJobs
     /// </summary>
     public static int MinimumTimeByBacktracking(int[] jobs, int k)
     {
-        Validate(jobs, k);
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
         if (jobs.Length == 0)
             return 0;
 
-        var desc = Descending(jobs);
+        var desc = (int[])jobs.Clone();
+        Array.Sort(desc);
+        Array.Reverse(desc);
+        static void Search(int[] desc, int idx, int[] loads, ref int best)
+        {
+            if (idx == desc.Length)
+            {
+                best = Math.Min(best, loads.Max());
+                return;
+            }
+
+            int job = desc[idx];
+
+            for (int i = 0; i < loads.Length; i++)
+            {
+                // Loads only grow, so a worker already at or past `best` can never
+                // lead to an improvement -- cut the branch, do not just score it.
+                if (loads[i] + job >= best)
+                    continue;
+
+                bool duplicate = false;
+                for (int j = 0; j < i; j++)
+                    if (loads[j] == loads[i]) { duplicate = true; break; }
+                if (duplicate)
+                    continue;
+
+                loads[i] += job;
+                Search(desc, idx + 1, loads, ref best);
+                loads[i] -= job;
+            }
+        }
+
         int best = GreedyLongestFirst(jobs, k);            // a legal answer, hence a legal bound
         Search(desc, 0, new int[Math.Min(k, desc.Length)], ref best);
         return best;
-    }
-
-    private static void Search(int[] desc, int idx, int[] loads, ref int best)
-    {
-        if (idx == desc.Length)
-        {
-            best = Math.Min(best, loads.Max());
-            return;
-        }
-
-        int job = desc[idx];
-
-        for (int i = 0; i < loads.Length; i++)
-        {
-            // Loads only grow, so a worker already at or past `best` can never
-            // lead to an improvement -- cut the branch, do not just score it.
-            if (loads[i] + job >= best)
-                continue;
-
-            bool duplicate = false;
-            for (int j = 0; j < i; j++)
-                if (loads[j] == loads[i]) { duplicate = true; break; }
-            if (duplicate)
-                continue;
-
-            loads[i] += job;
-            Search(desc, idx + 1, loads, ref best);
-            loads[i] -= job;
-        }
     }
 
     // ------------------------------------------------------------- subset DP
@@ -257,7 +399,23 @@ public static class MinimumTimeToFinishAllJobs
     /// </summary>
     public static int MinimumTimeBySubsetDp(int[] jobs, int k)
     {
-        Validate(jobs, k);
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
 
         int n = jobs.Length;
         if (n == 0)
@@ -308,12 +466,32 @@ public static class MinimumTimeToFinishAllJobs
     /// </summary>
     public static int GreedyLongestFirst(int[] jobs, int k)
     {
-        Validate(jobs, k);
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+        if (k < 1)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
+
+        long totalTime = 0;
+        foreach (int job in jobs)
+        {
+            if (job < 0)
+                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
+            totalTime += job;
+        }
+
+        // Every bound here is a sum of job times; the constraints (n <= 12,
+        // job <= 1e7) keep that inside an int, but nothing stops a caller.
+        if (totalTime > int.MaxValue)
+            throw new ArgumentException("total job time overflows int", nameof(jobs));
         if (jobs.Length == 0)
             return 0;
 
+        var desc = (int[])jobs.Clone();
+        Array.Sort(desc);
+        Array.Reverse(desc);
+
         var loads = new int[Math.Min(k, jobs.Length)];
-        foreach (int job in Descending(jobs))
+        foreach (int job in desc)
         {
             int least = 0;
             for (int i = 1; i < loads.Length; i++)
@@ -323,37 +501,6 @@ public static class MinimumTimeToFinishAllJobs
         }
 
         return loads.Max();
-    }
-
-    // ------------------------------------------------------------- plumbing
-
-    private static int[] Descending(int[] jobs)
-    {
-        var desc = (int[])jobs.Clone();
-        Array.Sort(desc);
-        Array.Reverse(desc);
-        return desc;
-    }
-
-    private static void Validate(int[] jobs, int k)
-    {
-        if (jobs is null)
-            throw new ArgumentNullException(nameof(jobs));
-        if (k < 1)
-            throw new ArgumentOutOfRangeException(nameof(k), k, "there must be at least one worker");
-
-        long total = 0;
-        foreach (int job in jobs)
-        {
-            if (job < 0)
-                throw new ArgumentException($"job time {job} is negative", nameof(jobs));
-            total += job;
-        }
-
-        // Every bound here is a sum of job times; the constraints (n <= 12,
-        // job <= 1e7) keep that inside an int, but nothing stops a caller.
-        if (total > int.MaxValue)
-            throw new ArgumentException("total job time overflows int", nameof(jobs));
     }
 
     // ---------------------------------------------------------------- tests

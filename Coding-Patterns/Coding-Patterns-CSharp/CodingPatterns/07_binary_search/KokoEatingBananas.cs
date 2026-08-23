@@ -14,16 +14,14 @@ public class KokoEatingBananas
         while (lo < hi)
         {
             int mid = (lo + hi) / 2;
-            if (HoursNeeded(piles, mid) <= h)
+            long hoursNeeded = piles.Sum(p => (long)((p + mid - 1) / mid)); // ceil(p/k) without floating point
+            if (hoursNeeded <= h)
                 hi = mid;
             else
                 lo = mid + 1;
         }
         return lo;
     }
-
-    private long HoursNeeded(int[] piles, int k)
-        => piles.Sum(p => (p + k - 1) / k); // ceil(p/k) without floating point
 
     public static void Run()
     {

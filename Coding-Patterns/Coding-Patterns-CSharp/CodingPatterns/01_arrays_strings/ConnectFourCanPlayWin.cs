@@ -76,7 +76,14 @@ public static class ConnectFourCanPlayWin
     /// </summary>
     public static bool CanPlayWin(char[][] board, int x, int y, char player)
     {
-        Validate(board, x, y, player);
+        if (board is null || board.Length == 0)
+            throw new ArgumentException("board must have at least one row", nameof(board));
+        if (player == Empty)
+            throw new ArgumentException($"'{Empty}' is the empty marker, not a player", nameof(player));
+        if (x < 0 || x >= board.Length)
+            throw new ArgumentOutOfRangeException(nameof(x), $"row {x} outside 0..{board.Length - 1}");
+        if (board[x] is null || y < 0 || y >= board[x].Length)
+            throw new ArgumentOutOfRangeException(nameof(y), $"column {y} outside row {x}");
 
         if (board[x][y] != Empty)
             return false;                       // illegal move: no mutation, no win
@@ -91,7 +98,14 @@ public static class ConnectFourCanPlayWin
     /// </summary>
     public static bool WouldWin(char[][] board, int x, int y, char player)
     {
-        Validate(board, x, y, player);
+        if (board is null || board.Length == 0)
+            throw new ArgumentException("board must have at least one row", nameof(board));
+        if (player == Empty)
+            throw new ArgumentException($"'{Empty}' is the empty marker, not a player", nameof(player));
+        if (x < 0 || x >= board.Length)
+            throw new ArgumentOutOfRangeException(nameof(x), $"row {x} outside 0..{board.Length - 1}");
+        if (board[x] is null || y < 0 || y >= board[x].Length)
+            throw new ArgumentOutOfRangeException(nameof(y), $"column {y} outside row {x}");
 
         if (board[x][y] != Empty)
             return false;
@@ -108,6 +122,29 @@ public static class ConnectFourCanPlayWin
     /// </summary>
     public static bool IsWinningCell(char[][] board, int x, int y)
     {
+        // Matching pieces strictly beyond (r, c) along (dr, dc). Capped at
+        // Connect - 1: a 4th consecutive piece on one side already decides the
+        // answer, so counting further is wasted work.
+        static int Run(char[][] board, int r, int c, int dr, int dc)
+        {
+            char player = board[r][c];
+            int matched = 0;
+
+            for (int step = 1; step < Connect; step++)
+            {
+                int nr = r + dr * step, nc = c + dc * step;
+
+                if (nr < 0 || nr >= board.Length || nc < 0 || nc >= board[nr].Length)
+                    break;
+                if (board[nr][nc] != player)
+                    break;
+
+                matched++;
+            }
+
+            return matched;
+        }
+
         char player = board[x][y];
         if (player == Empty)
             return false;
@@ -124,31 +161,6 @@ public static class ConnectFourCanPlayWin
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Matching pieces strictly beyond (r, c) along (dr, dc). Capped at
-    /// Connect - 1: a 4th consecutive piece on one side already decides the
-    /// answer, so counting further is wasted work.
-    /// </summary>
-    private static int Run(char[][] board, int r, int c, int dr, int dc)
-    {
-        char player = board[r][c];
-        int matched = 0;
-
-        for (int step = 1; step < Connect; step++)
-        {
-            int nr = r + dr * step, nc = c + dc * step;
-
-            if (nr < 0 || nr >= board.Length || nc < 0 || nc >= board[nr].Length)
-                break;
-            if (board[nr][nc] != player)
-                break;
-
-            matched++;
-        }
-
-        return matched;
     }
 
     // ------------------------------------------------------------ whole board
@@ -200,20 +212,6 @@ public static class ConnectFourCanPlayWin
         }
 
         return ColumnFull;                      // stack reached the top
-    }
-
-    // ---------------------------------------------------------------- guards
-
-    private static void Validate(char[][] board, int x, int y, char player)
-    {
-        if (board is null || board.Length == 0)
-            throw new ArgumentException("board must have at least one row", nameof(board));
-        if (player == Empty)
-            throw new ArgumentException($"'{Empty}' is the empty marker, not a player", nameof(player));
-        if (x < 0 || x >= board.Length)
-            throw new ArgumentOutOfRangeException(nameof(x), $"row {x} outside 0..{board.Length - 1}");
-        if (board[x] is null || y < 0 || y >= board[x].Length)
-            throw new ArgumentOutOfRangeException(nameof(y), $"column {y} outside row {x}");
     }
 
     // ----------------------------------------------------------------- tests

@@ -30,6 +30,44 @@ public class BinaryTreeBoundary
     // ---- Approach 1: three explicit walks (easiest to explain out loud) ----
     public IList<int> BoundaryOfBinaryTree(TreeNode root)
     {
+        static bool IsLeaf(TreeNode node)
+            => node.Left == null && node.Right == null;
+
+        // Top-down, excluding leaves: emit before descending.
+        static void AddLeftBoundary(TreeNode node, List<int> result)
+        {
+            while (node != null && !IsLeaf(node))
+            {
+                result.Add(node.Val);
+                node = node.Left ?? node.Right;   // bend right only when left is gone
+            }
+        }
+
+        // Bottom-up, excluding leaves: collect top-down, then reverse.
+        static void AddRightBoundary(TreeNode node, List<int> result)
+        {
+            int start = result.Count;
+            while (node != null && !IsLeaf(node))
+            {
+                result.Add(node.Val);
+                node = node.Right ?? node.Left;
+            }
+            result.Reverse(start, result.Count - start);
+        }
+
+        // Any left-to-right DFS visits leaves in left-to-right order.
+        static void AddLeaves(TreeNode node, List<int> result)
+        {
+            if (node == null) return;
+            if (IsLeaf(node))
+            {
+                result.Add(node.Val);
+                return;
+            }
+            AddLeaves(node.Left, result);
+            AddLeaves(node.Right, result);
+        }
+
         var result = new List<int>();
         if (root == null) return result;
 
@@ -44,44 +82,6 @@ public class BinaryTreeBoundary
         return result;
     }
 
-    private static bool IsLeaf(TreeNode node)
-        => node.Left == null && node.Right == null;
-
-    // Top-down, excluding leaves: emit before descending.
-    private static void AddLeftBoundary(TreeNode node, List<int> result)
-    {
-        while (node != null && !IsLeaf(node))
-        {
-            result.Add(node.Val);
-            node = node.Left ?? node.Right;   // bend right only when left is gone
-        }
-    }
-
-    // Bottom-up, excluding leaves: collect top-down, then reverse.
-    private static void AddRightBoundary(TreeNode node, List<int> result)
-    {
-        int start = result.Count;
-        while (node != null && !IsLeaf(node))
-        {
-            result.Add(node.Val);
-            node = node.Right ?? node.Left;
-        }
-        result.Reverse(start, result.Count - start);
-    }
-
-    // Any left-to-right DFS visits leaves in left-to-right order.
-    private static void AddLeaves(TreeNode node, List<int> result)
-    {
-        if (node == null) return;
-        if (IsLeaf(node))
-        {
-            result.Add(node.Val);
-            return;
-        }
-        AddLeaves(node.Left, result);
-        AddLeaves(node.Right, result);
-    }
-
     // ---- Approach 2: one DFS, boundary membership carried as flags ----
     // Same O(n), but touches each node once instead of walking the two spines
     // and then re-walking the whole tree for leaves. The flags encode the same
@@ -90,6 +90,29 @@ public class BinaryTreeBoundary
     //   a right child joins it only if there is no left child.
     public IList<int> BoundaryOfBinaryTreeOnePass(TreeNode root)
     {
+        static bool IsLeaf(TreeNode node)
+            => node.Left == null && node.Right == null;
+
+        static void Collect(TreeNode node, bool onLeft, bool onRight,
+                            List<int> left, List<int> leaves, List<int> right)
+        {
+            if (node == null) return;
+
+            // Leaf check wins over the boundary flags -- that is what keeps a leaf
+            // sitting on a spine out of the left/right groups.
+            if (IsLeaf(node))
+            {
+                leaves.Add(node.Val);
+                return;
+            }
+
+            if (onLeft) left.Add(node.Val);
+            else if (onRight) right.Add(node.Val);
+
+            Collect(node.Left, onLeft, onRight && node.Right == null, left, leaves, right);
+            Collect(node.Right, onLeft && node.Left == null, onRight, left, leaves, right);
+        }
+
         var result = new List<int>();
         if (root == null) return result;
 
@@ -109,26 +132,6 @@ public class BinaryTreeBoundary
         right.Reverse();
         result.AddRange(right);
         return result;
-    }
-
-    private static void Collect(TreeNode node, bool onLeft, bool onRight,
-                                List<int> left, List<int> leaves, List<int> right)
-    {
-        if (node == null) return;
-
-        // Leaf check wins over the boundary flags -- that is what keeps a leaf
-        // sitting on a spine out of the left/right groups.
-        if (IsLeaf(node))
-        {
-            leaves.Add(node.Val);
-            return;
-        }
-
-        if (onLeft) left.Add(node.Val);
-        else if (onRight) right.Add(node.Val);
-
-        Collect(node.Left, onLeft, onRight && node.Right == null, left, leaves, right);
-        Collect(node.Right, onLeft && node.Left == null, onRight, left, leaves, right);
     }
 
     // ---- Tests ----

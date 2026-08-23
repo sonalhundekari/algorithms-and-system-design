@@ -188,13 +188,6 @@ public class ValidTicTacToe
         return rows;
     }
 
-    private static int ResolveK(int n, int? k)
-    {
-        int value = k ?? DefaultK(n);
-        if (value < 1) throw new ArgumentException("K must be at least 1");
-        return value;
-    }
-
     /// <summary>(countX, countO). O(N^2).</summary>
     public static (int X, int O) Counts(IReadOnlyList<string> rows)
     {
@@ -308,7 +301,8 @@ public class ValidTicTacToe
     public static bool IsValidCountingOnly(IReadOnlyList<string> grid, int? k = null)
     {
         var rows = Normalize(grid);
-        int kk = ResolveK(rows.Length, k);
+        int kk = k ?? DefaultK(rows.Length);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
         var (x, o) = Counts(rows);
 
         if (o > x || x > o + 1) return false;
@@ -325,7 +319,8 @@ public class ValidTicTacToe
     public static bool IsValid(IReadOnlyList<string> grid, int? k = null)
     {
         var rows = Normalize(grid);
-        int kk = ResolveK(rows.Length, k);
+        int kk = k ?? DefaultK(rows.Length);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
         var (x, o) = Counts(rows);
 
         // (a) X moves first and players alternate.
@@ -372,7 +367,9 @@ public class ValidTicTacToe
     public static bool ReachableReference(IReadOnlyList<string> grid, int? k = null)
     {
         var rows = Normalize(grid);
-        int n = rows.Length, kk = ResolveK(n, k);
+        int n = rows.Length;
+        int kk = k ?? DefaultK(n);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
         var memo = new Dictionary<string, bool>();
 
         bool Go(string[] board)
@@ -411,7 +408,8 @@ public class ValidTicTacToe
     /// Ground truth -- and only tractable because 3x3 has 5,478 of them.</summary>
     public static HashSet<string> AllReachable(int n, int? k = null)
     {
-        int kk = ResolveK(n, k);
+        int kk = k ?? DefaultK(n);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
         var start = Enumerable.Repeat(new string(Empty, n), n).ToArray();
         var seen = new HashSet<string> { Key(start) };
         var frontier = new Stack<string[]>();
@@ -448,7 +446,9 @@ public class ValidTicTacToe
     public static long CountSequences(IReadOnlyList<string> grid, int? k = null)
     {
         var rows = Normalize(grid);
-        int n = rows.Length, kk = ResolveK(n, k);
+        int n = rows.Length;
+        int kk = k ?? DefaultK(n);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
 
         var xs = new List<(int R, int C)>();
         var os = new List<(int R, int C)>();
@@ -497,7 +497,8 @@ public class ValidTicTacToe
     /// checks CountSequences from the other end. 255,168 for standard 3x3.</summary>
     public static long CountGames(int n, int? k = null)
     {
-        int kk = ResolveK(n, k);
+        int kk = k ?? DefaultK(n);
+        if (kk < 1) throw new ArgumentException("K must be at least 1");
         var memo = new Dictionary<string, long>();
 
         long Go(string[] board)

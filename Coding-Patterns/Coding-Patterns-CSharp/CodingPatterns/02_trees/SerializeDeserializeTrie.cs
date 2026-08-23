@@ -73,22 +73,19 @@ public class SerializeDeserializeTrie
 
     public string Serialize(IEnumerable<string> words)
     {
-        var sb = new StringBuilder();
-        Encode(Build(words), sb);
-        return sb.ToString();
-    }
+        // Depth is bounded by the longest word (<= 50 here), so recursion is safe.
+        static void Encode(TrieNode node, StringBuilder sb)
+        {
+            if (node.IsWord) sb.Append(WordEnd);        // at the root this encodes ""
+            foreach (var (ch, child) in node.Children)  // SortedDictionary: already sorted
+            {
+                sb.Append(ch);
+                Encode(child, sb);
+                sb.Append(NodeEnd);                     // the root is never closed
+            }
+        }
 
-    public IList<string> Deserialize(string data)
-    {
-        var words = new List<string>();
-        Collect(Decode(data), new StringBuilder(), words);
-        return words;
-    }
-
-    // ---- trie construction ----
-
-    private static TrieNode Build(IEnumerable<string> words)
-    {
+        // ---- trie construction ----
         var root = new TrieNode();
         foreach (var word in words)
         {
@@ -101,13 +98,28 @@ public class SerializeDeserializeTrie
             }
             node.IsWord = true;
         }
-        return root;
+
+        var sb = new StringBuilder();
+        Encode(root, sb);
+        return sb.ToString();
     }
 
-    // The inverse of Encode: ')' pops, a letter pushes, '$' flags. Iterative, so
-    // it is immune to however deep the encoded trie happens to be.
-    private static TrieNode Decode(string data)
+    public IList<string> Deserialize(string data)
     {
+        static void Collect(TrieNode node, StringBuilder prefix, List<string> words)
+        {
+            // Emit before descending, so a prefix precedes what extends it.
+            if (node.IsWord) words.Add(prefix.ToString());
+            foreach (var (ch, child) in node.Children)
+            {
+                prefix.Append(ch);
+                Collect(child, prefix, words);
+                prefix.Length--;                        // pop, no reallocation
+            }
+        }
+
+        // The inverse of Encode: ')' pops, a letter pushes, '$' flags. Iterative, so
+        // it is immune to however deep the encoded trie happens to be.
         var root = new TrieNode();
         var stack = new Stack<TrieNode>();
         stack.Push(root);
@@ -134,33 +146,10 @@ public class SerializeDeserializeTrie
 
         if (stack.Count != 1)
             throw new FormatException("malformed encoding: unclosed node");
-        return root;
-    }
 
-    // ---- the two walks ----
-
-    // Depth is bounded by the longest word (<= 50 here), so recursion is safe.
-    private static void Encode(TrieNode node, StringBuilder sb)
-    {
-        if (node.IsWord) sb.Append(WordEnd);        // at the root this encodes ""
-        foreach (var (ch, child) in node.Children)  // SortedDictionary: already sorted
-        {
-            sb.Append(ch);
-            Encode(child, sb);
-            sb.Append(NodeEnd);                     // the root is never closed
-        }
-    }
-
-    private static void Collect(TrieNode node, StringBuilder prefix, List<string> words)
-    {
-        // Emit before descending, so a prefix precedes what extends it.
-        if (node.IsWord) words.Add(prefix.ToString());
-        foreach (var (ch, child) in node.Children)
-        {
-            prefix.Append(ch);
-            Collect(child, prefix, words);
-            prefix.Length--;                        // pop, no reallocation
-        }
+        var words = new List<string>();
+        Collect(root, new StringBuilder(), words);
+        return words;
     }
 
     // ---- Tests ----

@@ -77,7 +77,33 @@ public class MaxCreditsKClasses
         k = Math.Min(k, n);                       // K >= N makes the cap inert
         if (n == 0 || k <= 0) return 0;
 
-        var (ordered, prev) = Prepare(classes, inclusiveEnd);
+        // Sort by end time and precompute p(i) for every class: the number of
+        // classes that finish early enough to be followed by ordered[i] -- i.e. the
+        // length of the still-usable prefix, which is the row index the DP jumps to.
+        var ordered = classes.OrderBy(c => c.End).ThenBy(c => c.Start).ToArray();
+        var ends = ordered.Select(c => c.End).ToArray();
+
+        var prev = new int[ordered.Length];
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            // ends <= start when a shared boundary is legal, ends < start when not.
+            // LowerBound counts entries strictly less than Start; UpperBound counts
+            // those less than or equal.
+            int lo = 0, hi = ends.Length;
+            while (lo < hi)
+            {
+                int mid = lo + (hi - lo) / 2;
+                bool before = inclusiveEnd ? ends[mid] < ordered[i].Start : ends[mid] <= ordered[i].Start;
+                if (before) lo = mid + 1;
+                else hi = mid;
+            }
+
+            // Math.Min keeps a class from being its own predecessor: a zero-length
+            // class (Start == End) satisfies `end <= start` against itself, and
+            // without the clamp the DP would happily take it twice.
+            prev[i] = Math.Min(lo, i);
+        }
+
 
         var row = new long[n + 1];                // j = 0: nothing may be taken
         var cur = new long[n + 1];
@@ -105,7 +131,33 @@ public class MaxCreditsKClasses
         k = Math.Min(k, n);
         if (n == 0 || k <= 0) return (0, new List<Class>());
 
-        var (ordered, prev) = Prepare(classes, inclusiveEnd);
+        // Sort by end time and precompute p(i) for every class: the number of
+        // classes that finish early enough to be followed by ordered[i] -- i.e. the
+        // length of the still-usable prefix, which is the row index the DP jumps to.
+        var ordered = classes.OrderBy(c => c.End).ThenBy(c => c.Start).ToArray();
+        var ends = ordered.Select(c => c.End).ToArray();
+
+        var prev = new int[ordered.Length];
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            // ends <= start when a shared boundary is legal, ends < start when not.
+            // LowerBound counts entries strictly less than Start; UpperBound counts
+            // those less than or equal.
+            int lo = 0, hi = ends.Length;
+            while (lo < hi)
+            {
+                int mid = lo + (hi - lo) / 2;
+                bool before = inclusiveEnd ? ends[mid] < ordered[i].Start : ends[mid] <= ordered[i].Start;
+                if (before) lo = mid + 1;
+                else hi = mid;
+            }
+
+            // Math.Min keeps a class from being its own predecessor: a zero-length
+            // class (Start == End) satisfies `end <= start` against itself, and
+            // without the clamp the DP would happily take it twice.
+            prev[i] = Math.Min(lo, i);
+        }
+
 
         var dp = new long[n + 1, k + 1];
         for (int i = 1; i <= n; i++)
@@ -135,55 +187,6 @@ public class MaxCreditsKClasses
     }
 
     /// <summary>
-    /// Sort by end time and precompute p(i) for every class: the number of
-    /// classes that finish early enough to be followed by ordered[i] -- i.e. the
-    /// length of the still-usable prefix, which is the row index the DP jumps to.
-    /// </summary>
-    private static (Class[] Ordered, int[] Prev) Prepare(IReadOnlyList<Class> classes, bool inclusiveEnd)
-    {
-        var ordered = classes.OrderBy(c => c.End).ThenBy(c => c.Start).ToArray();
-        var ends = ordered.Select(c => c.End).ToArray();
-
-        var prev = new int[ordered.Length];
-        for (int i = 0; i < ordered.Length; i++)
-        {
-            // ends <= start when a shared boundary is legal, ends < start when not.
-            int p = inclusiveEnd ? LowerBound(ends, ordered[i].Start) : UpperBound(ends, ordered[i].Start);
-            // Math.Min keeps a class from being its own predecessor: a zero-length
-            // class (Start == End) satisfies `end <= start` against itself, and
-            // without the clamp the DP would happily take it twice.
-            prev[i] = Math.Min(p, i);
-        }
-        return (ordered, prev);
-    }
-
-    /// <summary>Count of entries strictly less than value (first index of value).</summary>
-    private static int LowerBound(int[] sorted, int value)
-    {
-        int lo = 0, hi = sorted.Length;
-        while (lo < hi)
-        {
-            int mid = lo + (hi - lo) / 2;
-            if (sorted[mid] < value) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
-    }
-
-    /// <summary>Count of entries less than or equal to value (index past the last).</summary>
-    private static int UpperBound(int[] sorted, int value)
-    {
-        int lo = 0, hi = sorted.Length;
-        while (lo < hi)
-        {
-            int mid = lo + (hi - lo) / 2;
-            if (sorted[mid] <= value) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
-    }
-
-    /// <summary>
     /// LeetCode 1751 -- events[i] = [startDay, endDay, value], at most k attended.
     /// End days are INCLUSIVE, so [1,2] and [2,3] collide over day 2.
     /// </summary>
@@ -206,7 +209,19 @@ public class MaxCreditsKClasses
 
         var dp = new int[n + 1];
         for (int i = 1; i <= n; i++)
-            dp[i] = Math.Max(dp[i - 1], jobs[i - 1].Profit + dp[UpperBound(ends, jobs[i - 1].Start)]);
+        {
+            // Count of ends <= this job's start: the index past the last job that
+            // can still be followed by this one.
+            int lo = 0, hi = ends.Length;
+            while (lo < hi)
+            {
+                int mid = lo + (hi - lo) / 2;
+                if (ends[mid] <= jobs[i - 1].Start) lo = mid + 1;
+                else hi = mid;
+            }
+
+            dp[i] = Math.Max(dp[i - 1], jobs[i - 1].Profit + dp[lo]);
+        }
         return dp[n];
     }
 

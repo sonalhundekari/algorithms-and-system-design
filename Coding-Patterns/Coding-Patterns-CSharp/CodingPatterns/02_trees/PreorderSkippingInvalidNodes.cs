@@ -68,24 +68,6 @@ namespace CodingPatterns.Trees;
 
 public class PreorderSkippingInvalidNodes
 {
-    // parent -> children, in the order the edges appear in the input.
-    private static Dictionary<int, List<int>> BuildChildren(int[][] edges)
-    {
-        var children = new Dictionary<int, List<int>>();
-        foreach (var edge in edges)
-        {
-            if (!children.TryGetValue(edge[0], out var list))
-                children[edge[0]] = list = new List<int>();
-            list.Add(edge[1]);
-        }
-        return children;
-    }
-
-    private static readonly List<int> NoChildren = new();
-
-    private static List<int> ChildrenOf(Dictionary<int, List<int>> children, int node)
-        => children.TryGetValue(node, out var list) ? list : NoChildren;
-
     // The one node that is never a child. Directed edge lists only.
     //
     // An undirected edge list carries no such asymmetry -- there the root has to
@@ -106,23 +88,31 @@ public class PreorderSkippingInvalidNodes
         var output = new List<int>();
         if (n <= 0) return output;
 
-        var children = BuildChildren(edges);
+        // parent -> children, in the order the edges appear in the input.
+        var children = new Dictionary<int, List<int>>();
+        foreach (var edge in edges)
+        {
+            if (!children.TryGetValue(edge[0], out var list))
+                children[edge[0]] = list = new List<int>();
+            list.Add(edge[1]);
+        }
+
         var bad = new HashSet<int>(invalid);
         if (root < 0) root = FindRoot(n, edges);
         if (root < 0) return output;
 
-        Visit(root, children, bad, output);
+        void Visit(int node)
+        {
+            if (!bad.Contains(node))
+                output.Add(node);                   // emit: gated on validity
+
+            if (children.TryGetValue(node, out var kids))
+                foreach (var child in kids)
+                    Visit(child);                   // recurse: never gated
+        }
+
+        Visit(root);
         return output;
-    }
-
-    private static void Visit(int node, Dictionary<int, List<int>> children,
-                              HashSet<int> bad, List<int> output)
-    {
-        if (!bad.Contains(node))
-            output.Add(node);                       // emit: gated on validity
-
-        foreach (var child in ChildrenOf(children, node))
-            Visit(child, children, bad, output);    // recurse: never gated
     }
 
     // ---- Approach 2: iterative, same gated emission, explicit O(h) stack ----
@@ -134,7 +124,15 @@ public class PreorderSkippingInvalidNodes
         var output = new List<int>();
         if (n <= 0) return output;
 
-        var children = BuildChildren(edges);
+        // parent -> children, in the order the edges appear in the input.
+        var children = new Dictionary<int, List<int>>();
+        foreach (var edge in edges)
+        {
+            if (!children.TryGetValue(edge[0], out var list))
+                children[edge[0]] = list = new List<int>();
+            list.Add(edge[1]);
+        }
+
         var bad = new HashSet<int>(invalid);
         if (root < 0) root = FindRoot(n, edges);
         if (root < 0) return output;
@@ -148,9 +146,9 @@ public class PreorderSkippingInvalidNodes
             if (!bad.Contains(node))
                 output.Add(node);
 
-            var kids = ChildrenOf(children, node);
-            for (var i = kids.Count - 1; i >= 0; i--)
-                stack.Push(kids[i]);
+            if (children.TryGetValue(node, out var kids))
+                for (var i = kids.Count - 1; i >= 0; i--)
+                    stack.Push(kids[i]);
         }
 
         return output;
@@ -168,7 +166,15 @@ public class PreorderSkippingInvalidNodes
         var output = new List<int>();
         if (n <= 0) return output;
 
-        var children = BuildChildren(edges);
+        // parent -> children, in the order the edges appear in the input.
+        var children = new Dictionary<int, List<int>>();
+        foreach (var edge in edges)
+        {
+            if (!children.TryGetValue(edge[0], out var list))
+                children[edge[0]] = list = new List<int>();
+            list.Add(edge[1]);
+        }
+
         var bad = new HashSet<int>(invalid);
         if (root < 0) root = FindRoot(n, edges);
         if (root < 0) return output;
@@ -177,13 +183,14 @@ public class PreorderSkippingInvalidNodes
         List<int> ValidChildren(int node)
         {
             var result = new List<int>();
-            foreach (var child in ChildrenOf(children, node))
-            {
-                if (bad.Contains(child))
-                    result.AddRange(ValidChildren(child));   // promote, in place
-                else
-                    result.Add(child);
-            }
+            if (children.TryGetValue(node, out var kids))
+                foreach (var child in kids)
+                {
+                    if (bad.Contains(child))
+                        result.AddRange(ValidChildren(child));   // promote, in place
+                    else
+                        result.Add(child);
+                }
             return result;
         }
 

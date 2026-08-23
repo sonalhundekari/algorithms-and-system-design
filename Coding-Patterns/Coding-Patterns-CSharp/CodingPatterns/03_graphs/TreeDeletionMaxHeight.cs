@@ -357,20 +357,19 @@ public static class TreeDeletionMaxHeight
         if (tree.Count == 0)
             return 0;
 
-        return ToMeasure(Contrib(tree, tree.Mark(deleted), tree.Root), measure);
-    }
+        // The recurrence itself. Deleted nodes hand their children's height up
+        // unchanged; survivors add one level. O(n) time, O(h) stack.
+        static int Contrib(RootedTree tree, bool[] deleted, int v)
+        {
+            int tallest = 0;
+            foreach (int c in tree.Children[v])
+                tallest = Math.Max(tallest, Contrib(tree, deleted, c));
 
-    /// <summary>
-    /// The recurrence itself. Deleted nodes hand their children's height up
-    /// unchanged; survivors add one level. O(n) time, O(h) stack.
-    /// </summary>
-    private static int Contrib(RootedTree tree, bool[] deleted, int v)
-    {
-        int tallest = 0;
-        foreach (int c in tree.Children[v])
-            tallest = Math.Max(tallest, Contrib(tree, deleted, c));
+            return deleted[v] ? tallest : tallest + 1;
+        }
 
-        return deleted[v] ? tallest : tallest + 1;
+        int levels = Contrib(tree, tree.Mark(deleted), tree.Root);
+        return measure == HeightMeasure.Levels ? levels : Math.Max(0, levels - 1);
     }
 
     /// <summary>
@@ -387,24 +386,25 @@ public static class TreeDeletionMaxHeight
         if (tree.Count == 0)
             return 0;
 
-        return ToMeasure(ContribAll(tree, tree.Mark(deleted))[tree.Root], measure);
-    }
-
-    /// <summary>Contrib for every node at once, bottom-up, no recursion. O(n).</summary>
-    private static int[] ContribAll(RootedTree tree, bool[] deleted)
-    {
-        var contrib = new int[tree.Count];
-
-        foreach (int v in tree.BottomUp)
+        // Contrib for every node at once, bottom-up, no recursion. O(n).
+        static int[] ContribAll(RootedTree tree, bool[] deleted)
         {
-            int tallest = 0;
-            foreach (int c in tree.Children[v])
-                tallest = Math.Max(tallest, contrib[c]);
+            var contrib = new int[tree.Count];
 
-            contrib[v] = deleted[v] ? tallest : tallest + 1;
+            foreach (int v in tree.BottomUp)
+            {
+                int tallest = 0;
+                foreach (int c in tree.Children[v])
+                    tallest = Math.Max(tallest, contrib[c]);
+
+                contrib[v] = deleted[v] ? tallest : tallest + 1;
+            }
+
+            return contrib;
         }
 
-        return contrib;
+        int levels = ContribAll(tree, tree.Mark(deleted))[tree.Root];
+        return measure == HeightMeasure.Levels ? levels : Math.Max(0, levels - 1);
     }
 
     /// <summary>
@@ -427,6 +427,23 @@ public static class TreeDeletionMaxHeight
         if (tree.Count == 0)
             return result;
 
+        // Contrib for every node at once, bottom-up, no recursion. O(n).
+        static int[] ContribAll(RootedTree tree, bool[] deleted)
+        {
+            var contrib = new int[tree.Count];
+
+            foreach (int v in tree.BottomUp)
+            {
+                int tallest = 0;
+                foreach (int c in tree.Children[v])
+                    tallest = Math.Max(tallest, contrib[c]);
+
+                contrib[v] = deleted[v] ? tallest : tallest + 1;
+            }
+
+            return contrib;
+        }
+
         var gone = tree.Mark(deleted);
         var contrib = ContribAll(tree, gone);
 
@@ -441,7 +458,9 @@ public static class TreeDeletionMaxHeight
 
             covered[v] = p != -1 && (covered[p] || !gone[p]);
             if (!gone[v] && !covered[v])
-                result.Add((tree.Label[v], ToMeasure(contrib[v], measure)));
+                result.Add((tree.Label[v], measure == HeightMeasure.Levels
+                    ? contrib[v]
+                    : Math.Max(0, contrib[v] - 1)));
         }
 
         return result;
@@ -490,7 +509,30 @@ public static class TreeDeletionMaxHeight
         if (tree is null)
             throw new ArgumentNullException(nameof(tree));
 
-        int budget = LevelBudget(k, measure);
+        // Contrib for every node at once, bottom-up, no recursion. O(n).
+        static int[] ContribAll(RootedTree tree, bool[] deleted)
+        {
+            var contrib = new int[tree.Count];
+
+            foreach (int v in tree.BottomUp)
+            {
+                int tallest = 0;
+                foreach (int c in tree.Children[v])
+                    tallest = Math.Max(tallest, contrib[c]);
+
+                contrib[v] = deleted[v] ? tallest : tallest + 1;
+            }
+
+            return contrib;
+        }
+
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a height budget cannot be negative");
+
+        // The caller's k, in levels. Edges k = 0 means "every survivor is alone",
+        // which is NOT the same as "delete everything" -- that is only expressible
+        // as Levels k = 0. Another reason to pin the convention down early.
+        int budget = measure == HeightMeasure.Levels ? k : k + 1;
         var nothing = new DeletionPlan(0, 0, Array.Empty<int>());
 
         if (tree.Count == 0)
@@ -607,7 +649,13 @@ public static class TreeDeletionMaxHeight
         if (tree is null)
             throw new ArgumentNullException(nameof(tree));
 
-        int budget = LevelBudget(k, measure);
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a height budget cannot be negative");
+
+        // The caller's k, in levels. Edges k = 0 means "every survivor is alone",
+        // which is NOT the same as "delete everything" -- that is only expressible
+        // as Levels k = 0. Another reason to pin the convention down early.
+        int budget = measure == HeightMeasure.Levels ? k : k + 1;
         if (tree.Count == 0)
             return new DeletionPlan(0, 0, Array.Empty<int>());
 
@@ -658,7 +706,30 @@ public static class TreeDeletionMaxHeight
         if (tree.Count > 22)
             throw new ArgumentException($"brute force is for oracles, not for {tree.Count} nodes", nameof(tree));
 
-        int budget = LevelBudget(k, measure);
+        // Contrib for every node at once, bottom-up, no recursion. O(n).
+        static int[] ContribAll(RootedTree tree, bool[] deleted)
+        {
+            var contrib = new int[tree.Count];
+
+            foreach (int v in tree.BottomUp)
+            {
+                int tallest = 0;
+                foreach (int c in tree.Children[v])
+                    tallest = Math.Max(tallest, contrib[c]);
+
+                contrib[v] = deleted[v] ? tallest : tallest + 1;
+            }
+
+            return contrib;
+        }
+
+        if (k < 0)
+            throw new ArgumentOutOfRangeException(nameof(k), "a height budget cannot be negative");
+
+        // The caller's k, in levels. Edges k = 0 means "every survivor is alone",
+        // which is NOT the same as "delete everything" -- that is only expressible
+        // as Levels k = 0. Another reason to pin the convention down early.
+        int budget = measure == HeightMeasure.Levels ? k : k + 1;
         if (tree.Count == 0)
             return new DeletionPlan(0, 0, Array.Empty<int>());
 
@@ -692,24 +763,6 @@ public static class TreeDeletionMaxHeight
 
         labels.Sort();
         return new DeletionPlan(best.Deletions, best.DepthSum, labels);
-    }
-
-    // ------------------------------------------------------------- conversions
-
-    private static int ToMeasure(int levels, HeightMeasure measure)
-        => measure == HeightMeasure.Levels ? levels : Math.Max(0, levels - 1);
-
-    /// <summary>
-    /// The caller's k, in levels. Edges k = 0 means "every survivor is alone",
-    /// which is NOT the same as "delete everything" -- that is only expressible
-    /// as Levels k = 0. Another reason to pin the convention down early.
-    /// </summary>
-    private static int LevelBudget(int k, HeightMeasure measure)
-    {
-        if (k < 0)
-            throw new ArgumentOutOfRangeException(nameof(k), "a height budget cannot be negative");
-
-        return measure == HeightMeasure.Levels ? k : k + 1;
     }
 
     // ------------------------------------------------------------------ tests

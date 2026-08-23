@@ -72,7 +72,19 @@ public static class ClosestBathroom
     /// </summary>
     public static int[][] DistanceField(string[] grid)
     {
-        Validate(grid);
+        if (grid is not null && grid.Length != 0)
+        {
+            int width = grid[0].Length;
+            for (int r = 0; r < grid.Length; r++)
+            {
+                if (grid[r] is null || grid[r].Length != width)
+                    throw new ArgumentException($"row {r} is ragged; every row must be {width} wide", nameof(grid));
+
+                foreach (char ch in grid[r])
+                    if (ch is not (Bathroom or Desk or Empty or Wall))
+                        throw new ArgumentException($"unexpected cell '{ch}' in row {r}", nameof(grid));
+            }
+        }
 
         int rows = grid?.Length ?? 0;
         if (rows == 0)
@@ -137,23 +149,6 @@ public static class ClosestBathroom
                     desks.Add(new DeskDistance(r, c, dist[r][c]));
 
         return desks;
-    }
-
-    private static void Validate(string[] grid)
-    {
-        if (grid is null || grid.Length == 0)
-            return;                                 // empty grid is a legal input
-
-        int cols = grid[0].Length;
-        for (int r = 0; r < grid.Length; r++)
-        {
-            if (grid[r] is null || grid[r].Length != cols)
-                throw new ArgumentException($"row {r} is ragged; every row must be {cols} wide", nameof(grid));
-
-            foreach (char ch in grid[r])
-                if (ch is not (Bathroom or Desk or Empty or Wall))
-                    throw new ArgumentException($"unexpected cell '{ch}' in row {r}", nameof(grid));
-        }
     }
 
     // ------------------------------------------------- point-to-point variant
@@ -502,14 +497,14 @@ public static class ClosestBathroom
     /// </summary>
     public static bool TryAssignCakes(int[] a, out List<CakeAssignment> pairs, out long totalDistance)
     {
-        var people = IndicesOf(a, Person);
-        var cakes = IndicesOf(a, Cake);
-        return TryAssign(people, cakes, out pairs, out totalDistance);
-    }
+        var people = new List<int>();
+        var cakes = new List<int>();
+        for (int i = 0; i < (a?.Length ?? 0); i++)          // both already ascending
+        {
+            if (a[i] == Person) people.Add(i);
+            else if (a[i] == Cake) cakes.Add(i);
+        }
 
-    private static bool TryAssign(
-        List<int> people, List<int> cakes, out List<CakeAssignment> pairs, out long totalDistance)
-    {
         pairs = new List<CakeAssignment>();
         totalDistance = 0;
 
@@ -582,6 +577,8 @@ public static class ClosestBathroom
         return Unreachable;                         // unreachable in practice
     }
 
+    // ------------------------------------------------------------------ tests
+
     private static List<int> IndicesOf(int[] a, int value)
     {
         var found = new List<int>();
@@ -590,8 +587,6 @@ public static class ClosestBathroom
                 found.Add(i);
         return found;                               // already ascending
     }
-
-    // ------------------------------------------------------------------ tests
 
     public static void Run()
     {

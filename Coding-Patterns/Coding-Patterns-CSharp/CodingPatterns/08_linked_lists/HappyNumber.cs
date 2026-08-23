@@ -23,6 +23,19 @@ public class HappyNumber
 {
     public bool IsHappy(int n)
     {
+        // Sum of the squares of n's digits.
+        static int NextNumber(int n)
+        {
+            var total = 0;
+            while (n > 0)
+            {
+                var digit = n % 10;
+                total += digit * digit;
+                n /= 10;
+            }
+            return total;
+        }
+
         int slow = n, fast = NextNumber(n);
         // Stop when fast reaches 1 (happy) or the pointers meet (cycle).
         while (fast != 1 && slow != fast)
@@ -37,23 +50,23 @@ public class HappyNumber
     // stores every number seen instead of running in constant space.
     public bool IsHappySeen(int n)
     {
+        // Sum of the squares of n's digits.
+        static int NextNumber(int n)
+        {
+            var total = 0;
+            while (n > 0)
+            {
+                var digit = n % 10;
+                total += digit * digit;
+                n /= 10;
+            }
+            return total;
+        }
+
         var seen = new HashSet<int>();
         while (n != 1 && seen.Add(n))
             n = NextNumber(n);
         return n == 1;
-    }
-
-    // Sum of the squares of n's digits.
-    private static int NextNumber(int n)
-    {
-        var total = 0;
-        while (n > 0)
-        {
-            var digit = n % 10;
-            total += digit * digit;
-            n /= 10;
-        }
-        return total;
     }
 
     // ---- Tests ----

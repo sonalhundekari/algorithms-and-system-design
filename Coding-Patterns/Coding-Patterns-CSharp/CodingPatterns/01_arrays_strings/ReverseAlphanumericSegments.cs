@@ -71,7 +71,7 @@ public class ReverseAlphanumericSegments
 
         while (i < n)
         {
-            if (!IsAlphanumeric(chars[i]))
+            if (!char.IsAsciiLetterOrDigit(chars[i]))
             {
                 i++; // fixed point: stays exactly where it is
                 continue;
@@ -79,7 +79,7 @@ public class ReverseAlphanumericSegments
 
             // [i, j) is the maximal alphanumeric run starting at i.
             int j = i;
-            while (j < n && IsAlphanumeric(chars[j]))
+            while (j < n && char.IsAsciiLetterOrDigit(chars[j]))
                 j++;
 
             // Two pointers inward, confined to this run.
@@ -91,8 +91,6 @@ public class ReverseAlphanumericSegments
 
         return new string(chars);
     }
-
-    private static bool IsAlphanumeric(char c) => char.IsAsciiLetterOrDigit(c);
 
     public static void Run()
     {
@@ -154,7 +152,7 @@ public class ReverseAlphanumericSegments
             string actual = ReverseSegments(input);
             var drift = new StringBuilder();
             for (int k = 0; k < input.Length; k++)
-                if (!IsAlphanumeric(input[k]) && input[k] != actual[k])
+                if (!char.IsAsciiLetterOrDigit(input[k]) && input[k] != actual[k])
                     drift.Append($" index {k}: '{input[k]}' -> '{actual[k]}'");
 
             string verdict = drift.Length == 0 ? "all fixed" : drift.ToString();

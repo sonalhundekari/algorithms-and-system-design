@@ -25,30 +25,30 @@ public class NumberOfIslands
         int cols = grid[0].Length;
         int count = 0;
 
+        void Dfs(int r, int c)
+        {
+            // out of bounds or water/visited
+            if (r < 0 || r >= rows || c < 0 || c >= cols || grid[r][c] != '1')
+                return;
+
+            // mark visited by sinking the land
+            grid[r][c] = '0';
+            Dfs(r + 1, c);
+            Dfs(r - 1, c);
+            Dfs(r, c + 1);
+            Dfs(r, c - 1);
+        }
+
         for (int r = 0; r < rows; r++)
         {
             for (int c = 0; c < cols; c++)
                 if (grid[r][c] == '1') 
                 { 
-                    Dfs(grid, r, c, rows, cols); 
+                    Dfs(r, c); 
                     count++; 
                 }
         }
         return count;
-    }
-
-    private void Dfs(char[][] grid, int r, int c, int rows, int cols)
-    {
-        // out of bounds or water/visited
-        if (r < 0 || r >= rows || c < 0 || c >= cols || grid[r][c] != '1')
-            return;
-
-        // mark visited by sinking the land
-        grid[r][c] = '0';
-        Dfs(grid, r + 1, c, rows, cols);
-        Dfs(grid, r - 1, c, rows, cols);
-        Dfs(grid, r, c + 1, rows, cols);
-        Dfs(grid, r, c - 1, rows, cols);
     }
 
     // ---- Tests ----

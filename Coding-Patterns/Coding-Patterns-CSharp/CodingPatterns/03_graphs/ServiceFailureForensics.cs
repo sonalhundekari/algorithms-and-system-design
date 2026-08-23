@@ -442,7 +442,7 @@ public static class ServiceFailureForensics
         var pending = impacted.ToDictionary(s => s, _ => 0);
 
         foreach (string service in impacted)
-            foreach (string caller in Callers(reverse, service))
+            foreach (string caller in reverse.GetValueOrDefault(service) ?? Enumerable.Empty<string>())
                 if (caller != service && pending.ContainsKey(caller))
                     pending[caller]++;
 
@@ -465,7 +465,7 @@ public static class ServiceFailureForensics
             if (depth[service] > depth[deepest])
                 deepest = service;
 
-            foreach (string caller in Callers(reverse, service))
+            foreach (string caller in reverse.GetValueOrDefault(service) ?? Enumerable.Empty<string>())
             {
                 if (caller == service || !pending.ContainsKey(caller))
                     continue;
@@ -493,11 +493,6 @@ public static class ServiceFailureForensics
         chain.Reverse();                                      // walked deepest -> origin
         return chain;
     }
-
-    private static List<string> Callers(Dictionary<string, List<string>> reverse, string service) =>
-        reverse.TryGetValue(service, out var callers) ? callers : EmptyCallers;
-
-    private static readonly List<string> EmptyCallers = new();
 
     /// <summary>
     /// The write-up's memoized DFS, kept runnable because it is the version people
@@ -530,7 +525,7 @@ public static class ServiceFailureForensics
             visiting.Add(service);
             var best = new List<string> { service };
 
-            foreach (string caller in Callers(reverse, service))
+            foreach (string caller in reverse.GetValueOrDefault(service) ?? Enumerable.Empty<string>())
             {
                 if (caller == service)
                     continue;
@@ -592,12 +587,54 @@ public static class ServiceFailureForensics
         }
 
         for (int u = 0; u < n; u++)
-            foreach (string caller in Callers(reverse, nodes[u]))
+            foreach (string caller in reverse.GetValueOrDefault(nodes[u]) ?? Enumerable.Empty<string>())
                 if (id.TryGetValue(caller, out int v))
                 {
                     forward[u].Add(v);
                     backward[v].Add(u);
                 }
+
+        // Iterative DFS finishing order: node pushed once its whole subtree is done.
+        // Iterative because "the dependency chain is 10^5 long" is the case this file
+        // keeps coming back to. The frame stack holds (node, next child index), so it
+        // is O(depth) rather than the O(width) a node stack would cost.
+        static int[] FinishOrder(List<int>[] adjacency, int n)
+        {
+            var order = new List<int>(n);
+            var seen = new bool[n];
+            var stack = new Stack<(int Node, int Next)>();
+
+            for (int start = 0; start < n; start++)
+            {
+                if (seen[start])
+                    continue;
+
+                seen[start] = true;
+                stack.Push((start, 0));
+
+                while (stack.Count > 0)
+                {
+                    var (node, next) = stack.Pop();
+
+                    if (next == adjacency[node].Count)
+                    {
+                        order.Add(node);                      // all children finished
+                        continue;
+                    }
+
+                    stack.Push((node, next + 1));             // resume here afterwards
+                    int child = adjacency[node][next];
+
+                    if (!seen[child])
+                    {
+                        seen[child] = true;
+                        stack.Push((child, 0));
+                    }
+                }
+            }
+
+            return order.ToArray();
+        }
 
         var order = FinishOrder(forward, n);                  // pass 1: finishing times
         var component = new int[n];
@@ -685,50 +722,6 @@ public static class ServiceFailureForensics
 
         chain.Reverse();
         return chain;
-    }
-
-    /// <summary>
-    /// Iterative DFS finishing order: node pushed once its whole subtree is done.
-    /// Iterative because "the dependency chain is 10^5 long" is the case this file
-    /// keeps coming back to. The frame stack holds (node, next child index), so it
-    /// is O(depth) rather than the O(width) a node stack would cost.
-    /// </summary>
-    private static int[] FinishOrder(List<int>[] adjacency, int n)
-    {
-        var order = new List<int>(n);
-        var seen = new bool[n];
-        var stack = new Stack<(int Node, int Next)>();
-
-        for (int start = 0; start < n; start++)
-        {
-            if (seen[start])
-                continue;
-
-            seen[start] = true;
-            stack.Push((start, 0));
-
-            while (stack.Count > 0)
-            {
-                var (node, next) = stack.Pop();
-
-                if (next == adjacency[node].Count)
-                {
-                    order.Add(node);                          // all children finished
-                    continue;
-                }
-
-                stack.Push((node, next + 1));                 // resume here afterwards
-                int child = adjacency[node][next];
-
-                if (!seen[child])
-                {
-                    seen[child] = true;
-                    stack.Push((child, 0));
-                }
-            }
-        }
-
-        return order.ToArray();
     }
 
     // ==================================================================== tests
@@ -1083,7 +1076,7 @@ public static class ServiceFailureForensics
             onPath.Add(service);
             int best = 1;
 
-            foreach (string caller in Callers(reverse, service))
+            foreach (string caller in reverse.GetValueOrDefault(service) ?? Enumerable.Empty<string>())
                 if (!onPath.Contains(caller))
                     best = Math.Max(best, 1 + Walk(caller));
 
@@ -1102,7 +1095,7 @@ public static class ServiceFailureForensics
         var reverse = BuildReverseGraph(calls);
 
         while (stack.Count > 0)
-            foreach (string caller in Callers(reverse, stack.Pop()))
+            foreach (string caller in reverse.GetValueOrDefault(stack.Pop()) ?? Enumerable.Empty<string>())
                 if (seen.Add(caller))
                 {
                     if (caller == to)

@@ -39,17 +39,17 @@ public class RewriteTreeWithSubtreeSums
     // Returns the subtree sum of `a` and writes it into `b` on the way up.
     public TreeNode Rewrite(TreeNode root1, TreeNode root2)
     {
+        static long Fill(TreeNode a, TreeNode b)
+        {
+            if (a == null) return 0;                 // same shape => b is null too
+
+            long sum = a.Val + Fill(a.Left, b.Left) + Fill(a.Right, b.Right);
+            b.Val = (int)sum;                        // assign AFTER the children
+            return sum;
+        }
+
         Fill(root1, root2);
         return root2;
-    }
-
-    private static long Fill(TreeNode a, TreeNode b)
-    {
-        if (a == null) return 0;                 // same shape => b is null too
-
-        long sum = a.Val + Fill(a.Left, b.Left) + Fill(a.Right, b.Right);
-        b.Val = (int)sum;                        // assign AFTER the children
-        return sum;
     }
 
     // ---- Approach 2: iterative post-order (deep trees, no stack overflow) ----
@@ -101,25 +101,34 @@ public class RewriteTreeWithSubtreeSums
     // happens-before edge that publishes the children's writes.
     public TreeNode RewriteParallel(TreeNode root1, TreeNode root2)
     {
+        static long Fill(TreeNode a, TreeNode b)
+        {
+            if (a == null) return 0;                 // same shape => b is null too
+
+            long sum = a.Val + Fill(a.Left, b.Left) + Fill(a.Right, b.Right);
+            b.Val = (int)sum;                        // assign AFTER the children
+            return sum;
+        }
+
+        static long FillParallel(TreeNode a, TreeNode b, int depthBudget)
+        {
+            if (a == null) return 0;
+            if (depthBudget <= 0) return Fill(a, b);   // deep enough: go sequential
+
+            // Fork the left subtree, run the right one on this thread, then join.
+            // Handing off only one side keeps the current thread busy instead of
+            // parking it while two children run elsewhere.
+            var left = Task.Run(() => FillParallel(a.Left, b.Left, depthBudget - 1));
+            long right = FillParallel(a.Right, b.Right, depthBudget - 1);
+
+            long sum = a.Val + left.Result + right;    // join publishes child writes
+            b.Val = (int)sum;
+            return sum;
+        }
+
         int cutoff = (int)Math.Ceiling(Math.Log2(Math.Max(Environment.ProcessorCount, 1))) + 1;
         FillParallel(root1, root2, cutoff);
         return root2;
-    }
-
-    private static long FillParallel(TreeNode a, TreeNode b, int depthBudget)
-    {
-        if (a == null) return 0;
-        if (depthBudget <= 0) return Fill(a, b);   // deep enough: go sequential
-
-        // Fork the left subtree, run the right one on this thread, then join.
-        // Handing off only one side keeps the current thread busy instead of
-        // parking it while two children run elsewhere.
-        var left = Task.Run(() => FillParallel(a.Left, b.Left, depthBudget - 1));
-        long right = FillParallel(a.Right, b.Right, depthBudget - 1);
-
-        long sum = a.Val + left.Result + right;    // join publishes child writes
-        b.Val = (int)sum;
-        return sum;
     }
 
     // ---- Level-order helpers (complete tree <-> array, as in the samples) ----

@@ -52,7 +52,10 @@ public class NQueens
         {
             if (row == n)
             {
-                boards.Add(Render(queenCol));
+                var rows = new List<string>(n);
+                foreach (int col in queenCol)
+                    rows.Add(new string('.', col) + "Q" + new string('.', n - col - 1));
+                boards.Add(rows);
                 return;
             }
 
@@ -74,15 +77,6 @@ public class NQueens
 
         Place(0);
         return boards;
-    }
-
-    private static IList<string> Render(int[] queenCol)
-    {
-        int n = queenCol.Length;
-        var rows = new List<string>(n);
-        foreach (int col in queenCol)
-            rows.Add(new string('.', col) + "Q" + new string('.', n - col - 1));
-        return rows;
     }
 
     // ---- Follow-up: count only (LeetCode 52) ----
@@ -112,6 +106,24 @@ public class NQueens
         if (n <= 0)
             return 0;
 
+        static int Count(int cols, int diag, int anti, int full)
+        {
+            if (cols == full)                        // every column filled == n rows placed
+                return 1;
+
+            int available = ~(cols | diag | anti) & full;
+            int count = 0;
+
+            while (available != 0)
+            {
+                int bit = available & -available;    // lowest free column
+                available -= bit;
+                count += Count(cols | bit, ((diag | bit) << 1) & full, (anti | bit) >> 1, full);
+            }
+
+            return count;
+        }
+
         int full = (1 << n) - 1;
         int total = 0;
 
@@ -128,24 +140,6 @@ public class NQueens
         }
 
         return total;
-    }
-
-    private static int Count(int cols, int diag, int anti, int full)
-    {
-        if (cols == full)                        // every column filled == n rows placed
-            return 1;
-
-        int available = ~(cols | diag | anti) & full;
-        int count = 0;
-
-        while (available != 0)
-        {
-            int bit = available & -available;    // lowest free column
-            available -= bit;
-            count += Count(cols | bit, ((diag | bit) << 1) & full, (anti | bit) >> 1, full);
-        }
-
-        return count;
     }
 
     // ---- Tests ----

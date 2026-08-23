@@ -47,27 +47,27 @@ public class LongestUnivaluePath
     // ---- Approach 1: recursive post-order ----
     public int LongestPath(TreeNode root)
     {
+        // Longest univalue path in EDGES that starts at `node` and only goes down.
+        static int Arrow(TreeNode node, ref int best)
+        {
+            if (node == null) return 0;
+
+            // Recurse first, whatever the values are -- the answer may live in a
+            // subtree that has nothing in common with this node.
+            var leftDown = Arrow(node.Left, ref best);
+            var rightDown = Arrow(node.Right, ref best);
+
+            // An arrow crosses the edge only when the child agrees with us.
+            var left = node.Left != null && node.Left.Val == node.Val ? leftDown + 1 : 0;
+            var right = node.Right != null && node.Right.Val == node.Val ? rightDown + 1 : 0;
+
+            best = Math.Max(best, left + right);   // the path that bends here
+            return Math.Max(left, right);          // what the parent can extend
+        }
+
         var best = 0;
         Arrow(root, ref best);
         return best;
-    }
-
-    // Longest univalue path in EDGES that starts at `node` and only goes down.
-    private static int Arrow(TreeNode node, ref int best)
-    {
-        if (node == null) return 0;
-
-        // Recurse first, whatever the values are -- the answer may live in a
-        // subtree that has nothing in common with this node.
-        var leftDown = Arrow(node.Left, ref best);
-        var rightDown = Arrow(node.Right, ref best);
-
-        // An arrow crosses the edge only when the child agrees with us.
-        var left = node.Left != null && node.Left.Val == node.Val ? leftDown + 1 : 0;
-        var right = node.Right != null && node.Right.Val == node.Val ? rightDown + 1 : 0;
-
-        best = Math.Max(best, left + right);   // the path that bends here
-        return Math.Max(left, right);          // what the parent can extend
     }
 
     // ---- Approach 2: iterative post-order, no call stack ----

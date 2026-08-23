@@ -225,7 +225,23 @@ public static class JobScheduler
         PriorityOrder order = PriorityOrder.LowerIsHigher,
         int quantum = 1)
     {
-        Validate(jobs);
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+
+        var seen = new HashSet<int>();
+        foreach (var job in jobs)
+        {
+            if (job is null)
+                throw new ArgumentException("job list contains a null", nameof(jobs));
+            if (job.StartTime < 0)
+                throw new ArgumentException($"job {job.Id} arrives at {job.StartTime}; arrival cannot be negative", nameof(jobs));
+            if (job.EndTime <= job.StartTime)
+                throw new ArgumentException($"job {job.Id} has duration {job.Duration}; duration must be positive", nameof(jobs));
+            if (job.Priority == int.MinValue)
+                throw new ArgumentException($"job {job.Id} has an un-negatable priority", nameof(jobs));   // HigherIsHigher flips the sign
+            if (!seen.Add(job.Id))
+                throw new ArgumentException($"duplicate job id {job.Id}", nameof(jobs));
+        }
 
         var slices = algorithm switch
         {
@@ -241,7 +257,36 @@ public static class JobScheduler
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "unknown algorithm"),
         };
 
-        return Assemble(jobs, algorithm, slices);
+        // Merges adjacent slices of the same job, then derives the per-job numbers.
+        // Everything downstream reads the merged timeline, so a preemptive schedule
+        // and a non-preemptive one print through the same code path.
+        var merged = new List<Segment>(slices.Count);
+        foreach (var slice in slices)
+        {
+            if (merged.Count > 0 && merged[^1].JobId == slice.JobId && merged[^1].End == slice.Start)
+                merged[^1] = merged[^1] with { End = slice.End };
+            else
+                merged.Add(slice);
+        }
+
+        var byJob = new Dictionary<int, List<Segment>>();
+        foreach (var segment in merged)
+        {
+            if (!byJob.TryGetValue(segment.JobId, out var list))
+                byJob[segment.JobId] = list = new List<Segment>();
+            list.Add(segment);
+        }
+
+        var stats = new List<JobStats>(jobs.Count);
+        foreach (var job in jobs)
+        {
+            var segments = byJob[job.Id];
+            stats.Add(new JobStats(
+                job.Id, job.Arrival, job.Duration, job.Priority, segments[0].Start, segments[^1].End, segments));
+        }
+
+        stats.Sort((a, b) => a.FirstStart.CompareTo(b.FirstStart));   // execution order, as the prompt prints it
+        return new ScheduleResult(algorithm, merged, stats);
     }
 
     /// <summary>
@@ -253,7 +298,7 @@ public static class JobScheduler
     /// deterministic; "any valid answer" is a much worse thing to hand over than
     /// a stable one.
     /// </summary>
-    private static Func<int, int, (int, int, int)> KeyFor(
+    public static Func<int, int, (int, int, int)> KeyFor(
         IReadOnlyList<Job> jobs, SchedulingAlgorithm algorithm, PriorityOrder order)
     {
         int Pri(int i) => order == PriorityOrder.LowerIsHigher ? jobs[i].Priority : -jobs[i].Priority;
@@ -287,10 +332,13 @@ public static class JobScheduler
     // `time` -- no max() needed, which is the small proof that makes the code
     // shorter than the description.
 
-    private static List<Segment> NonPreemptive(IReadOnlyList<Job> jobs, Func<int, int, (int, int, int)> key)
+    public static List<Segment> NonPreemptive(IReadOnlyList<Job> jobs, Func<int, int, (int, int, int)> key)
     {
         int n = jobs.Count;
-        var arrivals = ByArrival(jobs);
+        var arrivals = Enumerable.Range(0, jobs.Count)
+            .OrderBy(i => jobs[i].Arrival)
+            .ThenBy(i => i)                                  // stable: input order breaks arrival ties
+            .ToArray();
         var ready = new PriorityQueue<int, (int, int, int)>();
         var timeline = new List<Segment>(n);
 
@@ -331,10 +379,13 @@ public static class JobScheduler
     // Slices are strictly positive: everything with arrival <= time was already
     // admitted, so the next arrival is strictly in the future.
 
-    private static List<Segment> Preemptive(IReadOnlyList<Job> jobs, Func<int, int, (int, int, int)> key)
+    public static List<Segment> Preemptive(IReadOnlyList<Job> jobs, Func<int, int, (int, int, int)> key)
     {
         int n = jobs.Count;
-        var arrivals = ByArrival(jobs);
+        var arrivals = Enumerable.Range(0, jobs.Count)
+            .OrderBy(i => jobs[i].Arrival)
+            .ThenBy(i => i)                                  // stable: input order breaks arrival ties
+            .ToArray();
         var remaining = jobs.Select(j => j.Duration).ToArray();
         var ready = new PriorityQueue<int, (int, int, int)>();
         var slices = new List<Segment>();
@@ -383,13 +434,16 @@ public static class JobScheduler
     // waiting since before it started -- a real bug, and the standard textbook
     // convention is the one implemented here.
 
-    private static List<Segment> RoundRobinSlices(IReadOnlyList<Job> jobs, int quantum)
+    public static List<Segment> RoundRobinSlices(IReadOnlyList<Job> jobs, int quantum)
     {
         if (quantum < 1)
             throw new ArgumentOutOfRangeException(nameof(quantum), "quantum must be at least 1");
 
         int n = jobs.Count;
-        var arrivals = ByArrival(jobs);
+        var arrivals = Enumerable.Range(0, jobs.Count)
+            .OrderBy(i => jobs[i].Arrival)
+            .ThenBy(i => i)                                  // stable: input order breaks arrival ties
+            .ToArray();
         var remaining = jobs.Select(j => j.Duration).ToArray();
         var queue = new Queue<int>();
         var slices = new List<Segment>();
@@ -451,12 +505,31 @@ public static class JobScheduler
     public static ScheduleResult PriorityWithAging(
         IReadOnlyList<Job> jobs, int agingInterval, PriorityOrder order = PriorityOrder.LowerIsHigher)
     {
-        Validate(jobs);
+        if (jobs is null)
+            throw new ArgumentNullException(nameof(jobs));
+
+        var seen = new HashSet<int>();
+        foreach (var job in jobs)
+        {
+            if (job is null)
+                throw new ArgumentException("job list contains a null", nameof(jobs));
+            if (job.StartTime < 0)
+                throw new ArgumentException($"job {job.Id} arrives at {job.StartTime}; arrival cannot be negative", nameof(jobs));
+            if (job.EndTime <= job.StartTime)
+                throw new ArgumentException($"job {job.Id} has duration {job.Duration}; duration must be positive", nameof(jobs));
+            if (job.Priority == int.MinValue)
+                throw new ArgumentException($"job {job.Id} has an un-negatable priority", nameof(jobs));   // HigherIsHigher flips the sign
+            if (!seen.Add(job.Id))
+                throw new ArgumentException($"duplicate job id {job.Id}", nameof(jobs));
+        }
         if (agingInterval < 1)
             throw new ArgumentOutOfRangeException(nameof(agingInterval), "aging interval must be at least 1");
 
         int n = jobs.Count;
-        var arrivals = ByArrival(jobs);
+        var arrivals = Enumerable.Range(0, jobs.Count)
+            .OrderBy(i => jobs[i].Arrival)
+            .ThenBy(i => i)                                  // stable: input order breaks arrival ties
+            .ToArray();
         var ready = new List<int>();
         var timeline = new List<Segment>(n);
 
@@ -490,36 +563,20 @@ public static class JobScheduler
             time = finish;
         }
 
-        return Assemble(jobs, SchedulingAlgorithm.Priority, timeline);
-    }
-
-    // ------------------------------------------------------------- plumbing
-
-    private static int[] ByArrival(IReadOnlyList<Job> jobs)
-        => Enumerable.Range(0, jobs.Count)
-            .OrderBy(i => jobs[i].Arrival)
-            .ThenBy(i => i)                                  // stable: input order breaks arrival ties
-            .ToArray();
-
-    /// <summary>
-    /// Merges adjacent slices of the same job, then derives the per-job numbers.
-    /// Everything downstream reads the merged timeline, so a preemptive schedule
-    /// and a non-preemptive one print through the same code path.
-    /// </summary>
-    private static ScheduleResult Assemble(
-        IReadOnlyList<Job> jobs, SchedulingAlgorithm algorithm, List<Segment> slices)
-    {
-        var timeline = new List<Segment>(slices.Count);
-        foreach (var slice in slices)
+        // Merges adjacent slices of the same job, then derives the per-job numbers.
+        // Everything downstream reads the merged timeline, so a preemptive schedule
+        // and a non-preemptive one print through the same code path.
+        var merged = new List<Segment>(timeline.Count);
+        foreach (var slice in timeline)
         {
-            if (timeline.Count > 0 && timeline[^1].JobId == slice.JobId && timeline[^1].End == slice.Start)
-                timeline[^1] = timeline[^1] with { End = slice.End };
+            if (merged.Count > 0 && merged[^1].JobId == slice.JobId && merged[^1].End == slice.Start)
+                merged[^1] = merged[^1] with { End = slice.End };
             else
-                timeline.Add(slice);
+                merged.Add(slice);
         }
 
         var byJob = new Dictionary<int, List<Segment>>();
-        foreach (var segment in timeline)
+        foreach (var segment in merged)
         {
             if (!byJob.TryGetValue(segment.JobId, out var list))
                 byJob[segment.JobId] = list = new List<Segment>();
@@ -535,28 +592,7 @@ public static class JobScheduler
         }
 
         stats.Sort((a, b) => a.FirstStart.CompareTo(b.FirstStart));   // execution order, as the prompt prints it
-        return new ScheduleResult(algorithm, timeline, stats);
-    }
-
-    private static void Validate(IReadOnlyList<Job> jobs)
-    {
-        if (jobs is null)
-            throw new ArgumentNullException(nameof(jobs));
-
-        var seen = new HashSet<int>();
-        foreach (var job in jobs)
-        {
-            if (job is null)
-                throw new ArgumentException("job list contains a null", nameof(jobs));
-            if (job.StartTime < 0)
-                throw new ArgumentException($"job {job.Id} arrives at {job.StartTime}; arrival cannot be negative", nameof(jobs));
-            if (job.EndTime <= job.StartTime)
-                throw new ArgumentException($"job {job.Id} has duration {job.Duration}; duration must be positive", nameof(jobs));
-            if (job.Priority == int.MinValue)
-                throw new ArgumentException($"job {job.Id} has an un-negatable priority", nameof(jobs));   // HigherIsHigher flips the sign
-            if (!seen.Add(job.Id))
-                throw new ArgumentException($"duplicate job id {job.Id}", nameof(jobs));
-        }
+        return new ScheduleResult(SchedulingAlgorithm.Priority, merged, stats);
     }
 
     // ------------------------------------------------------------------ tests

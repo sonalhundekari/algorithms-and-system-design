@@ -37,7 +37,7 @@ public class NumOfIslands {
 
     public void findIsland(char[][] grid, int i, int j)
     {
-        if (isValidCell(grid, i, j))
+        if (i >= 0 && i < nr && j >= 0 && j < nc && grid[i][j] == '1')
         {
             grid[i][j] = '0';
             findIsland(grid, i + 1, j);
@@ -45,11 +45,6 @@ public class NumOfIslands {
             findIsland(grid, i, j + 1);
             findIsland(grid, i, j - 1);
         }
-    }
-
-    private bool isValidCell(char[][] grid, int i, int j)
-    {
-        return i >= 0 && i < nr && j >= 0 && j < nc && grid[i][j] == '1';
     }
 
     public static void Run()

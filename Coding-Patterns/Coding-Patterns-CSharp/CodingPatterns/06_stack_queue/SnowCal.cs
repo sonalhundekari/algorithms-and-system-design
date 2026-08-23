@@ -115,6 +115,48 @@ public static class SnowCal
         if (program is null)
             throw new ArgumentNullException(nameof(program));
 
+        // Tokenizes one line. Keywords are case-insensitive; function names are not,
+        // and may not be a keyword. Every arity and format error is caught here, so
+        // the main loop only ever sees a well-formed instruction.
+        static (Op Op, string Name, BigInteger Value) Parse(string line, int at)
+        {
+            if (line is null)
+                throw new SnowCalException(at, "null line");
+
+            var tokens = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0)
+                throw new SnowCalException(at, "blank line");
+
+            string keyword = tokens[0].ToUpperInvariant();
+
+            switch (keyword)
+            {
+                case "ADD":
+                case "MUL":
+                    if (tokens.Length != 2)
+                        throw new SnowCalException(at, $"{keyword} takes exactly one integer, got {tokens.Length - 1} argument(s)");
+                    if (!BigInteger.TryParse(tokens[1], out var value))
+                        throw new SnowCalException(at, $"{keyword} {tokens[1]}: '{tokens[1]}' is not an integer");
+                    return (keyword == "ADD" ? Op.Add : Op.Mul, null, value);
+
+                case "FUN":
+                case "INV":
+                    if (tokens.Length != 2)
+                        throw new SnowCalException(at, $"{keyword} takes exactly one name, got {tokens.Length - 1} argument(s)");
+                    if (Reserved.Contains(tokens[1].ToUpperInvariant()))
+                        throw new SnowCalException(at, $"'{tokens[1]}' is a keyword and cannot be a function name");
+                    return (keyword == "FUN" ? Op.Fun : Op.Inv, tokens[1], BigInteger.Zero);
+
+                case "END":
+                    if (tokens.Length != 1)
+                        throw new SnowCalException(at, "END takes no arguments");
+                    return (Op.End, null, BigInteger.Zero);
+
+                default:
+                    throw new SnowCalException(at, $"unknown command '{tokens[0]}'");
+            }
+        }
+
         var compiled = new Dictionary<string, Affine>(StringComparer.Ordinal);
         BigInteger x = BigInteger.Zero;
 
@@ -154,7 +196,13 @@ public static class SnowCal
             {
                 Op.Add => Affine.Add(value),
                 Op.Mul => Affine.Mul(value),
-                Op.Inv => Lookup(compiled, openName, name, at),
+                Op.Inv => compiled.TryGetValue(name, out var body) ? body
+                    // Distinguish the two ways this fails. "undefined" is a confusing thing to
+                    // be told about a function whose FUN line is on screen above you.
+                    : name == openName
+                        ? throw new SnowCalException(
+                            at, $"INV {name} inside its own definition; SnowCal has no recursion (an affine map cannot express it)")
+                        : throw new SnowCalException(at, $"INV {name}: no function named '{name}' has been defined"),
                 _ => throw new SnowCalException(at, $"unhandled op {op}"),
             };
 
@@ -192,66 +240,6 @@ public static class SnowCal
         .Select(line => line.Trim())
         .Where(line => line.Length > 0)
         .ToList();
-
-    // -------------------------------------------------------------- plumbing
-
-    private static Affine Lookup(Dictionary<string, Affine> compiled, string openName, string name, int at)
-    {
-        if (compiled.TryGetValue(name, out var body))
-            return body;
-
-        // Distinguish the two ways this fails. "undefined" is a confusing thing to
-        // be told about a function whose FUN line is on screen above you.
-        if (name == openName)
-            throw new SnowCalException(
-                at, $"INV {name} inside its own definition; SnowCal has no recursion (an affine map cannot express it)");
-
-        throw new SnowCalException(at, $"INV {name}: no function named '{name}' has been defined");
-    }
-
-    /// <summary>
-    /// Tokenizes one line. Keywords are case-insensitive; function names are not,
-    /// and may not be a keyword. Every arity and format error is caught here, so
-    /// the main loop only ever sees a well-formed instruction.
-    /// </summary>
-    private static (Op Op, string Name, BigInteger Value) Parse(string line, int at)
-    {
-        if (line is null)
-            throw new SnowCalException(at, "null line");
-
-        var tokens = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length == 0)
-            throw new SnowCalException(at, "blank line");
-
-        string keyword = tokens[0].ToUpperInvariant();
-
-        switch (keyword)
-        {
-            case "ADD":
-            case "MUL":
-                if (tokens.Length != 2)
-                    throw new SnowCalException(at, $"{keyword} takes exactly one integer, got {tokens.Length - 1} argument(s)");
-                if (!BigInteger.TryParse(tokens[1], out var value))
-                    throw new SnowCalException(at, $"{keyword} {tokens[1]}: '{tokens[1]}' is not an integer");
-                return (keyword == "ADD" ? Op.Add : Op.Mul, null, value);
-
-            case "FUN":
-            case "INV":
-                if (tokens.Length != 2)
-                    throw new SnowCalException(at, $"{keyword} takes exactly one name, got {tokens.Length - 1} argument(s)");
-                if (Reserved.Contains(tokens[1].ToUpperInvariant()))
-                    throw new SnowCalException(at, $"'{tokens[1]}' is a keyword and cannot be a function name");
-                return (keyword == "FUN" ? Op.Fun : Op.Inv, tokens[1], BigInteger.Zero);
-
-            case "END":
-                if (tokens.Length != 1)
-                    throw new SnowCalException(at, "END takes no arguments");
-                return (Op.End, null, BigInteger.Zero);
-
-            default:
-                throw new SnowCalException(at, $"unknown command '{tokens[0]}'");
-        }
-    }
 
     // ---------------------------------------------------------------- tests
 

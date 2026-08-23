@@ -272,7 +272,7 @@ public static class RobotEatsCandies
     /// gives the moves, and it costs one extra byte per cell instead of storing
     /// a path per cell.
     /// </summary>
-    private static (int[,] Dist, int[,] FromDir) Explore(CandyGrid game, (int Row, int Col) src)
+    public static (int[,] Dist, int[,] FromDir) Explore(CandyGrid game, (int Row, int Col) src)
     {
         int rows = game.Rows, cols = game.Cols;
         var dist = new int[rows, cols];
@@ -309,24 +309,6 @@ public static class RobotEatsCandies
         return (dist, fromDir);
     }
 
-    /// <summary>Commands that walk the BFS tree from the source down to a target.</summary>
-    private static string PathTo(int[,] fromDir, (int Row, int Col) src, (int Row, int Col) target)
-    {
-        var moves = new List<char>();
-        var (r, c) = target;
-
-        while ((r, c) != src)
-        {
-            int d = fromDir[r, c];
-            moves.Add(DirCommand[d]);
-            r -= DR[d];
-            c -= DC[d];
-        }
-
-        moves.Reverse();                       // built target -> src
-        return new string(moves.ToArray());
-    }
-
     // ---------------------------------------------------------------- greedy
 
     /// <summary>
@@ -350,6 +332,24 @@ public static class RobotEatsCandies
     /// </summary>
     public static string PlanGreedy(CandyGrid game)
     {
+        // Commands that walk the BFS tree from the source down to a target.
+        static string PathTo(int[,] fromDir, (int Row, int Col) src, (int Row, int Col) target)
+        {
+            var moves = new List<char>();
+            var (r, c) = target;
+
+            while ((r, c) != src)
+            {
+                int d = fromDir[r, c];
+                moves.Add(DirCommand[d]);
+                r -= DR[d];
+                c -= DC[d];
+            }
+
+            moves.Reverse();                       // built target -> src
+            return new string(moves.ToArray());
+        }
+
         var sim = game.Clone();
         var plan = new System.Text.StringBuilder();
 
@@ -505,6 +505,24 @@ public static class RobotEatsCandies
             i = prev;
         }
         order.Reverse();
+
+        // Commands that walk the BFS tree from the source down to a target.
+        static string PathTo(int[,] fromDir, (int Row, int Col) src, (int Row, int Col) target)
+        {
+            var moves = new List<char>();
+            var (r, c) = target;
+
+            while ((r, c) != src)
+            {
+                int d = fromDir[r, c];
+                moves.Add(DirCommand[d]);
+                r -= DR[d];
+                c -= DC[d];
+            }
+
+            moves.Reverse();                       // built target -> src
+            return new string(moves.ToArray());
+        }
 
         // ...then stitch the BFS paths between consecutive stops.
         var moves = new System.Text.StringBuilder();

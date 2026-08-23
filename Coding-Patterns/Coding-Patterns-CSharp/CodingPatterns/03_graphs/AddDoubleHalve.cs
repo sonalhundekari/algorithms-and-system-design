@@ -87,7 +87,8 @@ public static class AddDoubleHalve
     /// </summary>
     public static IReadOnlyList<Op> Func(long a, long b)
     {
-        Validate(a, b);
+        if (a < 1) throw new ArgumentOutOfRangeException(nameof(a), a, "must be a positive integer");
+        if (b < 1) throw new ArgumentOutOfRangeException(nameof(b), b, "must be a positive integer");
 
         var ops = new List<Op>();
         if (a == b)
@@ -127,7 +128,39 @@ public static class AddDoubleHalve
     /// </summary>
     public static IReadOnlyList<Op> FuncCompact(long a, long b)
     {
-        Validate(a, b);
+        // Appends the ops taking 1 to t.
+        static void Climb(long t, List<Op> ops)
+        {
+            if (t == 1)
+                return;
+
+            if (t % 2 == 0)
+            {
+                // t = 2^k * m with m odd. Reach the odd part, then dub k times.
+                long m = t;
+                int k = 0;
+                while (m % 2 == 0) { m /= 2; k++; }
+
+                Climb(m, ops);
+                for (int i = 0; i < k; i++)
+                    ops.Add(Op.Dub);
+                return;
+            }
+
+            if (t <= SmallOddDirect)
+            {
+                for (long v = 1; v < t; v += 2)
+                    ops.Add(Op.Add);
+                return;
+            }
+
+            Climb(2 * (t - 1), ops);   // even, odd part <= (t - 1) / 2
+            ops.Add(Op.Add);           // 2t - 2 -> 2t
+            ops.Add(Op.Split);         // 2t     -> t
+        }
+
+        if (a < 1) throw new ArgumentOutOfRangeException(nameof(a), a, "must be a positive integer");
+        if (b < 1) throw new ArgumentOutOfRangeException(nameof(b), b, "must be a positive integer");
 
         var ops = new List<Op>();
         if (a == b)
@@ -142,37 +175,6 @@ public static class AddDoubleHalve
 
     /// <summary>Below this, an odd target is cheaper to reach by plain adds.</summary>
     private const long SmallOddDirect = 9;
-
-    /// <summary>Appends the ops taking 1 to <paramref name="t"/>.</summary>
-    private static void Climb(long t, List<Op> ops)
-    {
-        if (t == 1)
-            return;
-
-        if (t % 2 == 0)
-        {
-            // t = 2^k * m with m odd. Reach the odd part, then dub k times.
-            long m = t;
-            int k = 0;
-            while (m % 2 == 0) { m /= 2; k++; }
-
-            Climb(m, ops);
-            for (int i = 0; i < k; i++)
-                ops.Add(Op.Dub);
-            return;
-        }
-
-        if (t <= SmallOddDirect)
-        {
-            for (long v = 1; v < t; v += 2)
-                ops.Add(Op.Add);
-            return;
-        }
-
-        Climb(2 * (t - 1), ops);   // even, odd part <= (t - 1) / 2
-        ops.Add(Op.Add);           // 2t - 2 -> 2t
-        ops.Add(Op.Split);         // 2t     -> t
-    }
 
     // ------------------------------------------------------------- the BFS answer
 
@@ -196,7 +198,8 @@ public static class AddDoubleHalve
     /// <returns>The ops, or null if b is unreachable below the ceiling.</returns>
     public static IReadOnlyList<Op> FuncShortest(long a, long b, long ceiling = 0)
     {
-        Validate(a, b);
+        if (a < 1) throw new ArgumentOutOfRangeException(nameof(a), a, "must be a positive integer");
+        if (b < 1) throw new ArgumentOutOfRangeException(nameof(b), b, "must be a positive integer");
 
         long floorCeiling = Math.Max(a, b);
         if (ceiling <= 0)
@@ -206,6 +209,13 @@ public static class AddDoubleHalve
 
         if (a == b)
             return Array.Empty<Op>();
+
+        static IEnumerable<(long Value, Op Via)> Neighbours(long v, long ceiling)
+        {
+            if (v + 2 <= ceiling) yield return (v + 2, Op.Add);
+            if (v <= ceiling / 2) yield return (v * 2, Op.Dub);   // written to avoid overflow
+            if (v > 1)            yield return (v / 2, Op.Split); // v = 1 would leave the positives
+        }
 
         // parent doubles as the visited set: present == already reached, and that
         // first reach is final. No separate HashSet.
@@ -224,30 +234,20 @@ public static class AddDoubleHalve
 
                 parent[next] = (v, op);
                 if (next == b)
-                    return Rebuild(parent, a, b);
+                {
+                    var ops = new List<Op>();
+                    for (long at = b; at != a; at = parent[at].Prev)
+                        ops.Add(parent[at].Via);
+
+                    ops.Reverse();
+                    return ops;
+                }
 
                 queue.Enqueue(next);
             }
         }
 
         return null;
-    }
-
-    private static IEnumerable<(long Value, Op Via)> Neighbours(long v, long ceiling)
-    {
-        if (v + 2 <= ceiling) yield return (v + 2, Op.Add);
-        if (v <= ceiling / 2) yield return (v * 2, Op.Dub);   // written to avoid overflow
-        if (v > 1)            yield return (v / 2, Op.Split); // v = 1 would leave the positives
-    }
-
-    private static IReadOnlyList<Op> Rebuild(Dictionary<long, (long Prev, Op Via)> parent, long a, long b)
-    {
-        var ops = new List<Op>();
-        for (long v = b; v != a; v = parent[v].Prev)
-            ops.Add(parent[v].Via);
-
-        ops.Reverse();
-        return ops;
     }
 
     // ----------------------------------------------------------------- plumbing
@@ -296,12 +296,6 @@ public static class AddDoubleHalve
             parts.Add($"... (+{ops.Count - maxShown} more)");
 
         return string.Join(" ", parts);
-    }
-
-    private static void Validate(long a, long b)
-    {
-        if (a < 1) throw new ArgumentOutOfRangeException(nameof(a), a, "must be a positive integer");
-        if (b < 1) throw new ArgumentOutOfRangeException(nameof(b), b, "must be a positive integer");
     }
 
     // --------------------------------------------------------------------- demo

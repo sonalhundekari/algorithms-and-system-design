@@ -105,6 +105,88 @@ public static class ForestParentArrayDelete
     public static ForestDeletion DeleteMany(
         int[] parent, IEnumerable<int> indices, ChildRepair repair = ChildRepair.PromoteToRoot)
     {
+        // lift[v] = the nearest node on v's own chain (v, parent[v], ...) that
+        // survives, or -1 if the chain reaches a deleted root without finding one.
+        //
+        // Written as an iterative climb with memoisation rather than recursion: the
+        // input may be a 100,000-node chain, and this is the one place in the file
+        // that would otherwise recurse to that depth. Each node is pushed on the
+        // path at most once across the whole loop, so the total is O(n).
+        static int[] BuildLift(int[] parent, bool[] removed)
+        {
+            int n = parent.Length;
+            var lift = new int[n];
+            Array.Fill(lift, Unknown);
+
+            var path = new List<int>();
+
+            for (int start = 0; start < n; start++)
+            {
+                if (lift[start] != Unknown)
+                    continue;
+
+                path.Clear();
+                int v = start;
+                int answer;
+
+                while (true)
+                {
+                    if (lift[v] != Unknown) { answer = lift[v]; break; }
+                    if (!removed[v]) { answer = v; break; }
+                    if (parent[v] == v) { answer = -1; break; }   // deleted root: chain ends
+
+                    path.Add(v);
+                    v = parent[v];                                // Validate() ruled out cycles
+                }
+
+                lift[v] = answer;
+                foreach (int u in path)
+                    lift[u] = answer;                             // one linear chain, one answer
+            }
+
+            return lift;
+        }
+
+        // Extend `removed` to every descendant of a removed node, same
+        // climb-and-memoise trick: a node is doomed exactly when its parent
+        // chain hits a removed node before it hits a root.
+        static void MarkDescendants(int[] parent, bool[] removed)
+        {
+            const byte unknown = 0, doomed = 1, safe = 2;
+
+            int n = parent.Length;
+            var state = new byte[n];
+            var path = new List<int>();
+
+            for (int start = 0; start < n; start++)
+            {
+                if (state[start] != unknown)
+                    continue;
+
+                path.Clear();
+                int v = start;
+                byte answer;
+
+                while (true)
+                {
+                    if (state[v] != unknown) { answer = state[v]; break; }
+                    if (removed[v]) { answer = doomed; break; }
+                    if (parent[v] == v) { answer = safe; break; }
+
+                    path.Add(v);
+                    v = parent[v];
+                }
+
+                state[v] = answer;
+                foreach (int u in path)
+                    state[u] = answer;
+            }
+
+            for (int i = 0; i < n; i++)
+                if (state[i] == doomed)
+                    removed[i] = true;
+        }
+
         Validate(parent);
         int n = parent.Length;
 
@@ -167,93 +249,7 @@ public static class ForestParentArrayDelete
         return new ForestDeletion(result, oldToNew, newToOld);
     }
 
-    /// <summary>
-    /// lift[v] = the nearest node on v's own chain (v, parent[v], ...) that
-    /// survives, or -1 if the chain reaches a deleted root without finding one.
-    ///
-    /// Written as an iterative climb with memoisation rather than recursion: the
-    /// input may be a 100,000-node chain, and this is the one place in the file
-    /// that would otherwise recurse to that depth. Each node is pushed on the
-    /// path at most once across the whole loop, so the total is O(n).
-    /// </summary>
-    private static int[] BuildLift(int[] parent, bool[] removed)
-    {
-        int n = parent.Length;
-        var lift = new int[n];
-        Array.Fill(lift, Unknown);
-
-        var path = new List<int>();
-
-        for (int start = 0; start < n; start++)
-        {
-            if (lift[start] != Unknown)
-                continue;
-
-            path.Clear();
-            int v = start;
-            int answer;
-
-            while (true)
-            {
-                if (lift[v] != Unknown) { answer = lift[v]; break; }
-                if (!removed[v]) { answer = v; break; }
-                if (parent[v] == v) { answer = -1; break; }   // deleted root: chain ends
-
-                path.Add(v);
-                v = parent[v];                                // Validate() ruled out cycles
-            }
-
-            lift[v] = answer;
-            foreach (int u in path)
-                lift[u] = answer;                             // one linear chain, one answer
-        }
-
-        return lift;
-    }
-
     private const int Unknown = -2;
-
-    /// <summary>
-    /// Extend <paramref name="removed"/> to every descendant of a removed node,
-    /// same climb-and-memoise trick: a node is doomed exactly when its parent
-    /// chain hits a removed node before it hits a root.
-    /// </summary>
-    private static void MarkDescendants(int[] parent, bool[] removed)
-    {
-        const byte unknown = 0, doomed = 1, safe = 2;
-
-        int n = parent.Length;
-        var state = new byte[n];
-        var path = new List<int>();
-
-        for (int start = 0; start < n; start++)
-        {
-            if (state[start] != unknown)
-                continue;
-
-            path.Clear();
-            int v = start;
-            byte answer;
-
-            while (true)
-            {
-                if (state[v] != unknown) { answer = state[v]; break; }
-                if (removed[v]) { answer = doomed; break; }
-                if (parent[v] == v) { answer = safe; break; }
-
-                path.Add(v);
-                v = parent[v];
-            }
-
-            state[v] = answer;
-            foreach (int u in path)
-                state[u] = answer;
-        }
-
-        for (int i = 0; i < n; i++)
-            if (state[i] == doomed)
-                removed[i] = true;
-    }
 
     // ------------------------------------------------------------- validation
 

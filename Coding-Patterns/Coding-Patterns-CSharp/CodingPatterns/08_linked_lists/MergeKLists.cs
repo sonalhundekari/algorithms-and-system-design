@@ -62,35 +62,36 @@ public class MergeKLists<T> where T : IComparable<T> {
     */
     public ListNode<T> MergeKListsRecursive(ListNode<T>[] lists) {
         if (lists == null || lists.Length == 0) return null;
-        return Merge(lists, 0, lists.Length - 1);
-    }
 
-    private ListNode<T> Merge(ListNode<T>[] lists, int left, int right) {
-        if (left == right) return lists[left];
+        static ListNode<T> MergeTwoLists(ListNode<T> a, ListNode<T> b) {
+            var dummy = new ListNode<T>();
+            var tail = dummy;
 
-        int mid = left + (right - left) / 2;
-        var leftMerged = Merge(lists, left, mid);
-        var rightMerged = Merge(lists, mid + 1, right);
-        return MergeTwoLists(leftMerged, rightMerged);
-    }
-
-    private ListNode<T> MergeTwoLists(ListNode<T> a, ListNode<T> b) {
-        var dummy = new ListNode<T>();
-        var tail = dummy;
-
-        while (a != null && b != null) {
-            if (a.val.CompareTo(b.val) <= 0) {
-                tail.next = a;
-                a = a.next;
-            } else {
-                tail.next = b;
-                b = b.next;
+            while (a != null && b != null) {
+                if (a.val.CompareTo(b.val) <= 0) {
+                    tail.next = a;
+                    a = a.next;
+                } else {
+                    tail.next = b;
+                    b = b.next;
+                }
+                tail = tail.next;
             }
-            tail = tail.next;
+
+            tail.next = a ?? b;
+            return dummy.next;
         }
 
-        tail.next = a ?? b;
-        return dummy.next;
+        ListNode<T> Merge(int left, int right) {
+            if (left == right) return lists[left];
+
+            int mid = left + (right - left) / 2;
+            var leftMerged = Merge(left, mid);
+            var rightMerged = Merge(mid + 1, right);
+            return MergeTwoLists(leftMerged, rightMerged);
+        }
+
+        return Merge(0, lists.Length - 1);
     }
 }
 

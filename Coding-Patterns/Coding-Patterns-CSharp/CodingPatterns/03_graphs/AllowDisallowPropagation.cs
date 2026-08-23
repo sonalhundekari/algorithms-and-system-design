@@ -87,14 +87,17 @@ public static class AllowDisallowPropagation
     // ------------------------------------------------------------- graph build
 
     /// <summary>
-    /// Child adjacency plus in-degree, from [parent, child] pairs. Duplicate
-    /// edges are left alone: they bump the in-degree twice and are decremented
-    /// twice, so Kahn stays correct, and OR is idempotent so the masks do not
-    /// care either. A self-loop is left alone too -- it is a cycle, and cycles
-    /// must be REPORTED rather than quietly dropped.
+    /// Kahn. Returns an order in which every parent precedes every child, or
+    /// null when a cycle makes that impossible. Nodes with no parents are the
+    /// seeds; isolated nodes are seeds too and simply pass straight through.
     /// </summary>
-    private static (List<int>[] Children, int[] InDegree) Build(int n, int[][] edges)
+    public static int[] TopologicalOrder(int n, int[][] edges)
     {
+        // Child adjacency plus in-degree, from [parent, child] pairs. Duplicate
+        // edges are left alone: they bump the in-degree twice and are decremented
+        // twice, so Kahn stays correct, and OR is idempotent so the masks do not
+        // care either. A self-loop is left alone too -- it is a cycle, and cycles
+        // must be REPORTED rather than quietly dropped.
         if (n < 0)
             throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
 
@@ -117,18 +120,6 @@ public static class AllowDisallowPropagation
             children[parent].Add(child);
             inDegree[child]++;
         }
-
-        return (children, inDegree);
-    }
-
-    /// <summary>
-    /// Kahn. Returns an order in which every parent precedes every child, or
-    /// null when a cycle makes that impossible. Nodes with no parents are the
-    /// seeds; isolated nodes are seeds too and simply pass straight through.
-    /// </summary>
-    public static int[] TopologicalOrder(int n, int[][] edges)
-    {
-        var (children, inDegree) = Build(n, edges);
 
         var queue = new Queue<int>();
         for (int i = 0; i < n; i++)
@@ -171,9 +162,40 @@ public static class AllowDisallowPropagation
         int n, int[][] edges, string[] allow, string[] disallow,
         out int[] allowMask, out int[] disallowMask)
     {
-        Validate(n, allow, disallow);
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+        if ((allow?.Length ?? 0) != n)
+            throw new ArgumentException($"allow must hold exactly {n} entries", nameof(allow));
+        if ((disallow?.Length ?? 0) != n)
+            throw new ArgumentException($"disallow must hold exactly {n} entries", nameof(disallow));
 
-        var (children, inDegree) = Build(n, edges);
+        // Child adjacency plus in-degree, from [parent, child] pairs. Duplicate
+        // edges are left alone: they bump the in-degree twice and are decremented
+        // twice, so Kahn stays correct, and OR is idempotent so the masks do not
+        // care either. A self-loop is left alone too -- it is a cycle, and cycles
+        // must be REPORTED rather than quietly dropped.
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+
+        var children = new List<int>[n];
+        for (int i = 0; i < n; i++)
+            children[i] = new List<int>();
+
+        var inDegree = new int[n];
+
+        foreach (var edge in edges ?? Array.Empty<int[]>())
+        {
+            if (edge is null || edge.Length != 2)
+                throw new ArgumentException("every edge must be a [parent, child] pair", nameof(edges));
+
+            int parent = edge[0], child = edge[1];
+            if (parent < 0 || parent >= n || child < 0 || child >= n)
+                throw new ArgumentOutOfRangeException(
+                    nameof(edges), $"edge [{parent}, {child}] refers to a node outside 0..{n - 1}");
+
+            children[parent].Add(child);
+            inDegree[child]++;
+        }
 
         allowMask = new int[n];
         disallowMask = new int[n];
@@ -255,7 +277,12 @@ public static class AllowDisallowPropagation
     /// </summary>
     public static string[] EffectiveMemoized(int n, int[][] edges, string[] allow, string[] disallow)
     {
-        Validate(n, allow, disallow);
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+        if ((allow?.Length ?? 0) != n)
+            throw new ArgumentException($"allow must hold exactly {n} entries", nameof(allow));
+        if ((disallow?.Length ?? 0) != n)
+            throw new ArgumentException($"disallow must hold exactly {n} entries", nameof(disallow));
 
         var parents = new List<int>[n];
         for (int i = 0; i < n; i++)
@@ -310,12 +337,43 @@ public static class AllowDisallowPropagation
     /// </summary>
     public static string[] EffectiveNaive(int n, int[][] edges, string[] allow, string[] disallow)
     {
-        Validate(n, allow, disallow);
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+        if ((allow?.Length ?? 0) != n)
+            throw new ArgumentException($"allow must hold exactly {n} entries", nameof(allow));
+        if ((disallow?.Length ?? 0) != n)
+            throw new ArgumentException($"disallow must hold exactly {n} entries", nameof(disallow));
 
         var order = TopologicalOrder(n, edges)
                     ?? throw new ArgumentException("graph has a cycle", nameof(edges));
 
-        var (children, _) = Build(n, edges);
+        // Child adjacency plus in-degree, from [parent, child] pairs. Duplicate
+        // edges are left alone: they bump the in-degree twice and are decremented
+        // twice, so Kahn stays correct, and OR is idempotent so the masks do not
+        // care either. A self-loop is left alone too -- it is a cycle, and cycles
+        // must be REPORTED rather than quietly dropped.
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+
+        var children = new List<int>[n];
+        for (int i = 0; i < n; i++)
+            children[i] = new List<int>();
+
+        var inDegree = new int[n];
+
+        foreach (var edge in edges ?? Array.Empty<int[]>())
+        {
+            if (edge is null || edge.Length != 2)
+                throw new ArgumentException("every edge must be a [parent, child] pair", nameof(edges));
+
+            int parent = edge[0], child = edge[1];
+            if (parent < 0 || parent >= n || child < 0 || child >= n)
+                throw new ArgumentOutOfRangeException(
+                    nameof(edges), $"edge [{parent}, {child}] refers to a node outside 0..{n - 1}");
+
+            children[parent].Add(child);
+            inDegree[child]++;
+        }
         var inherited = new int[n];
 
         var effective = new int[n];
@@ -330,16 +388,6 @@ public static class AllowDisallowPropagation
         for (int i = 0; i < n; i++)
             result[i] = LettersOf(effective[i]);
         return result;
-    }
-
-    private static void Validate(int n, string[] allow, string[] disallow)
-    {
-        if (n < 0)
-            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
-        if ((allow?.Length ?? 0) != n)
-            throw new ArgumentException($"allow must hold exactly {n} entries", nameof(allow));
-        if ((disallow?.Length ?? 0) != n)
-            throw new ArgumentException($"disallow must hold exactly {n} entries", nameof(disallow));
     }
 
     // ------------------------------------------- the allow-only framing (roles)
@@ -380,7 +428,33 @@ public static class AllowDisallowPropagation
             n = Math.Max(n, Math.Max(grant[0], grant[1]) + 1);
         }
 
-        var (children, inDegree) = Build(n, grants);
+        // Child adjacency plus in-degree, from [parent, child] pairs. Duplicate
+        // edges are left alone: they bump the in-degree twice and are decremented
+        // twice, so Kahn stays correct, and OR is idempotent so the masks do not
+        // care either. A self-loop is left alone too -- it is a cycle, and cycles
+        // must be REPORTED rather than quietly dropped.
+        if (n < 0)
+            throw new ArgumentOutOfRangeException(nameof(n), "node count cannot be negative");
+
+        var children = new List<int>[n];
+        for (int i = 0; i < n; i++)
+            children[i] = new List<int>();
+
+        var inDegree = new int[n];
+
+        foreach (var edge in grants ?? Array.Empty<int[]>())
+        {
+            if (edge is null || edge.Length != 2)
+                throw new ArgumentException("every edge must be a [parent, child] pair", nameof(grants));
+
+            int parent = edge[0], child = edge[1];
+            if (parent < 0 || parent >= n || child < 0 || child >= n)
+                throw new ArgumentOutOfRangeException(
+                    nameof(grants), $"edge [{parent}, {child}] refers to a node outside 0..{n - 1}");
+
+            children[parent].Add(child);
+            inDegree[child]++;
+        }
 
         var sets = new HashSet<string>[n];
         for (int i = 0; i < n; i++)

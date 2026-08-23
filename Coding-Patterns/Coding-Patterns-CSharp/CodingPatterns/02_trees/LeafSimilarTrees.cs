@@ -34,23 +34,23 @@ public class LeafSimilarTrees
     // ---- Approach 1: collect both leaf sequences, then compare ----
     public bool LeafSimilar(TreeNode root1, TreeNode root2)
     {
+        static void CollectLeaves(TreeNode node, List<int> leaves)
+        {
+            if (node == null) return;
+            if (node.Left == null && node.Right == null)
+            {
+                leaves.Add(node.Val);
+                return;                       // a leaf has no children to recurse into
+            }
+            CollectLeaves(node.Left, leaves);  // left before right == left-to-right order
+            CollectLeaves(node.Right, leaves);
+        }
+
         var a = new List<int>();
         var b = new List<int>();
         CollectLeaves(root1, a);
         CollectLeaves(root2, b);
         return a.SequenceEqual(b);
-    }
-
-    private static void CollectLeaves(TreeNode node, List<int> leaves)
-    {
-        if (node == null) return;
-        if (node.Left == null && node.Right == null)
-        {
-            leaves.Add(node.Val);
-            return;                       // a leaf has no children to recurse into
-        }
-        CollectLeaves(node.Left, leaves);  // left before right == left-to-right order
-        CollectLeaves(node.Right, leaves);
     }
 
     // ---- Approach 2: lockstep iteration, O(h) space, early exit ----
@@ -59,6 +59,19 @@ public class LeafSimilarTrees
     // ends the walk, and both must run out at the same moment.
     public bool LeafSimilarLockstep(TreeNode root1, TreeNode root2)
     {
+        // Advance the stack until a leaf pops, and return its value.
+        // Push Right first so Left comes off the stack first (left-to-right order).
+        static int NextLeaf(Stack<TreeNode> stack)
+        {
+            while (true)
+            {
+                var node = stack.Pop();
+                if (node.Left == null && node.Right == null) return node.Val;
+                if (node.Right != null) stack.Push(node.Right);
+                if (node.Left != null) stack.Push(node.Left);
+            }
+        }
+
         var s1 = new Stack<TreeNode>();
         var s2 = new Stack<TreeNode>();
         if (root1 != null) s1.Push(root1);
@@ -71,19 +84,6 @@ public class LeafSimilarTrees
 
         // Both exhausted together -> same length. One left over -> a prefix match.
         return s1.Count == 0 && s2.Count == 0;
-    }
-
-    // Advance the stack until a leaf pops, and return its value.
-    // Push Right first so Left comes off the stack first (left-to-right order).
-    private static int NextLeaf(Stack<TreeNode> stack)
-    {
-        while (true)
-        {
-            var node = stack.Pop();
-            if (node.Left == null && node.Right == null) return node.Val;
-            if (node.Right != null) stack.Push(node.Right);
-            if (node.Left != null) stack.Push(node.Left);
-        }
     }
 
     // ---- Tests ----

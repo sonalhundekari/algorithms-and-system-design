@@ -20,14 +20,16 @@ public class TreeNode
 public class ValidateBST
 {
     public bool IsValidBST(TreeNode root)
-        => Validate(root, long.MinValue, long.MaxValue);
-
-    private bool Validate(TreeNode node, long minVal, long maxVal)
     {
-        if (node == null) return true;
-        if (node.Val <= minVal || node.Val >= maxVal) return false;
-        return Validate(node.Left, minVal, node.Val) &&
-               Validate(node.Right, node.Val, maxVal);
+        bool Validate(TreeNode node, long minVal, long maxVal)
+        {
+            if (node == null) return true;
+            if (node.Val <= minVal || node.Val >= maxVal) return false;
+            return Validate(node.Left, minVal, node.Val) &&
+                   Validate(node.Right, node.Val, maxVal);
+        }
+
+        return Validate(root, long.MinValue, long.MaxValue);
     }
 
     public bool IsValidBSTOptimized(TreeNode root)

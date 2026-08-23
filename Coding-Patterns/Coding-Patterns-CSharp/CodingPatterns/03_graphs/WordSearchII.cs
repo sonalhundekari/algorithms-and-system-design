@@ -92,6 +92,115 @@ public class WordSearchII
 
     public IList<string> FindWords(char[][] board, string[] words)
     {
+        static int Index(char ch) => ch is >= 'a' and <= 'z' ? ch - 'a' : -1;
+
+        static int[] CountBoardLetters(char[][] board)
+        {
+            var counts = new int[26];
+            foreach (var row in board)
+            {
+                foreach (char ch in row)
+                {
+                    int idx = Index(ch);
+                    if (idx >= 0)
+                        counts[idx]++;
+                }
+            }
+            return counts;
+        }
+
+        // Cheap reject: the board simply does not hold enough of some letter.
+        static bool Formable(string word, int[] boardCounts)
+        {
+            Span<int> need = stackalloc int[26];
+            foreach (char ch in word)
+            {
+                int idx = Index(ch);
+                if (idx < 0)
+                    return false;           // letter outside the board's alphabet
+                if (++need[idx] > boardCounts[idx])
+                    return false;
+            }
+            return true;
+        }
+
+        // ---- Trie construction (with the two cheap prefilters) ----
+        static TrieNode BuildTrie(string[] words, int[] boardCounts)
+        {
+            var root = new TrieNode();
+
+            foreach (var word in words)
+            {
+                if (string.IsNullOrEmpty(word) || !Formable(word, boardCounts))
+                    continue;
+
+                // Start from whichever end is rarer on the board. Adjacency is symmetric, so a
+                // path spelling the reversal exists exactly when a path spelling the word does --
+                // but seeding the DFS on the rare letter kills most starting cells immediately.
+                bool reversed = boardCounts[Index(word[^1])] < boardCounts[Index(word[0])];
+
+                var node = root;
+                for (int i = 0; i < word.Length; i++)
+                {
+                    int idx = Index(reversed ? word[word.Length - 1 - i] : word[i]);
+                    var child = node.Children[idx];
+                    if (child is null)
+                    {
+                        child = new TrieNode();
+                        node.Children[idx] = child;
+                        node.ChildCount++;
+                    }
+                    node = child;
+                }
+
+                // Original orientation, so the caller gets back exactly what they asked for.
+                // The Contains guard collapses duplicate entries in `words` (the list holds at
+                // most two items, so this is free).
+                node.Words ??= new List<string>(1);
+                if (!node.Words.Contains(word, StringComparer.Ordinal))
+                    node.Words.Add(word);
+            }
+
+            return root;
+        }
+
+        static void Dfs(char[][] board, int r, int c, int rows, int cols, TrieNode parent, List<string> results)
+        {
+            char ch = board[r][c];
+            int idx = Index(ch);            // also rejects the Visited sentinel
+            if (idx < 0)
+                return;
+
+            var node = parent.Children[idx];
+            if (node is null)               // prefix pruning: this path spells nothing in the dictionary
+                return;
+
+            if (node.Words is not null)
+            {
+                // Reaching this node proves a board path spells it. Every word parked here is
+                // findable: the ones stored forwards spell that path, the ones stored backwards
+                // spell it in reverse -- and the reversed path is just as walkable.
+                results.AddRange(node.Words);
+                node.Words = null;          // dedupe: never emit the same word twice
+            }
+
+            board[r][c] = Visited;          // claim the cell for the duration of this path
+
+            if (r > 0) Dfs(board, r - 1, c, rows, cols, node, results);
+            if (r + 1 < rows) Dfs(board, r + 1, c, rows, cols, node, results);
+            if (c > 0) Dfs(board, r, c - 1, rows, cols, node, results);
+            if (c + 1 < cols) Dfs(board, r, c + 1, rows, cols, node, results);
+
+            board[r][c] = ch;               // backtrack: the cell is free for other words
+
+            // Leaf pruning -- this branch is spent, unlink it so future DFS calls die sooner.
+            if (node.ChildCount == 0 && node.Words is null)
+            {
+                parent.Children[idx] = null;
+                parent.ChildCount--;
+            }
+        }
+
         var results = new List<string>();
         if (board is null || board.Length == 0 || board[0] is null || board[0].Length == 0)
             return results;
@@ -120,116 +229,6 @@ public class WordSearchII
 
         return results;
     }
-
-    private void Dfs(char[][] board, int r, int c, int rows, int cols, TrieNode parent, List<string> results)
-    {
-        char ch = board[r][c];
-        int idx = Index(ch);            // also rejects the Visited sentinel
-        if (idx < 0)
-            return;
-
-        var node = parent.Children[idx];
-        if (node is null)               // prefix pruning: this path spells nothing in the dictionary
-            return;
-
-        if (node.Words is not null)
-        {
-            // Reaching this node proves a board path spells it. Every word parked here is
-            // findable: the ones stored forwards spell that path, the ones stored backwards
-            // spell it in reverse -- and the reversed path is just as walkable.
-            results.AddRange(node.Words);
-            node.Words = null;          // dedupe: never emit the same word twice
-        }
-
-        board[r][c] = Visited;          // claim the cell for the duration of this path
-
-        if (r > 0) Dfs(board, r - 1, c, rows, cols, node, results);
-        if (r + 1 < rows) Dfs(board, r + 1, c, rows, cols, node, results);
-        if (c > 0) Dfs(board, r, c - 1, rows, cols, node, results);
-        if (c + 1 < cols) Dfs(board, r, c + 1, rows, cols, node, results);
-
-        board[r][c] = ch;               // backtrack: the cell is free for other words
-
-        // Leaf pruning -- this branch is spent, unlink it so future DFS calls die sooner.
-        if (node.ChildCount == 0 && node.Words is null)
-        {
-            parent.Children[idx] = null;
-            parent.ChildCount--;
-        }
-    }
-
-    // ---- Trie construction (with the two cheap prefilters) ----
-
-    private static TrieNode BuildTrie(string[] words, int[] boardCounts)
-    {
-        var root = new TrieNode();
-
-        foreach (var word in words)
-        {
-            if (string.IsNullOrEmpty(word) || !Formable(word, boardCounts))
-                continue;
-
-            // Start from whichever end is rarer on the board. Adjacency is symmetric, so a
-            // path spelling the reversal exists exactly when a path spelling the word does --
-            // but seeding the DFS on the rare letter kills most starting cells immediately.
-            bool reversed = boardCounts[Index(word[^1])] < boardCounts[Index(word[0])];
-
-            var node = root;
-            for (int i = 0; i < word.Length; i++)
-            {
-                int idx = Index(reversed ? word[word.Length - 1 - i] : word[i]);
-                var child = node.Children[idx];
-                if (child is null)
-                {
-                    child = new TrieNode();
-                    node.Children[idx] = child;
-                    node.ChildCount++;
-                }
-                node = child;
-            }
-
-            // Original orientation, so the caller gets back exactly what they asked for.
-            // The Contains guard collapses duplicate entries in `words` (the list holds at
-            // most two items, so this is free).
-            node.Words ??= new List<string>(1);
-            if (!node.Words.Contains(word, StringComparer.Ordinal))
-                node.Words.Add(word);
-        }
-
-        return root;
-    }
-
-    /// <summary>Cheap reject: the board simply does not hold enough of some letter.</summary>
-    private static bool Formable(string word, int[] boardCounts)
-    {
-        Span<int> need = stackalloc int[26];
-        foreach (char ch in word)
-        {
-            int idx = Index(ch);
-            if (idx < 0)
-                return false;           // letter outside the board's alphabet
-            if (++need[idx] > boardCounts[idx])
-                return false;
-        }
-        return true;
-    }
-
-    private static int[] CountBoardLetters(char[][] board)
-    {
-        var counts = new int[26];
-        foreach (var row in board)
-        {
-            foreach (char ch in row)
-            {
-                int idx = Index(ch);
-                if (idx >= 0)
-                    counts[idx]++;
-            }
-        }
-        return counts;
-    }
-
-    private static int Index(char ch) => ch is >= 'a' and <= 'z' ? ch - 'a' : -1;
 
     // ---- Tests ----
     public static void Run()

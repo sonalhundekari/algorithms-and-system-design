@@ -185,7 +185,12 @@ public static partial class GrepWithContextLines
     public static List<string> Grep(IReadOnlyList<string> lines, string target, int linesAround,
                                     StringComparison comparison = StringComparison.Ordinal)
     {
-        Validate(lines, target, linesAround);
+        if (lines is null)
+            throw new ArgumentNullException(nameof(lines));
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+        if (linesAround < 0)
+            throw new ArgumentOutOfRangeException(nameof(linesAround), "Context size cannot be negative.");
 
         int n = lines.Count;
         var keep = new bool[n];
@@ -220,7 +225,12 @@ public static partial class GrepWithContextLines
     public static List<string> GrepDifferenceArray(IReadOnlyList<string> lines, string target, int linesAround,
                                                    StringComparison comparison = StringComparison.Ordinal)
     {
-        Validate(lines, target, linesAround);
+        if (lines is null)
+            throw new ArgumentNullException(nameof(lines));
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+        if (linesAround < 0)
+            throw new ArgumentOutOfRangeException(nameof(linesAround), "Context size cannot be negative.");
 
         int n = lines.Count;
         var delta = new int[n + 1];
@@ -245,16 +255,6 @@ public static partial class GrepWithContextLines
         }
 
         return output;
-    }
-
-    private static void Validate(IReadOnlyList<string> lines, string target, int linesAround)
-    {
-        if (lines is null)
-            throw new ArgumentNullException(nameof(lines));
-        if (target is null)
-            throw new ArgumentNullException(nameof(target));
-        if (linesAround < 0)
-            throw new ArgumentOutOfRangeException(nameof(linesAround), "Context size cannot be negative.");
     }
 }
 
@@ -390,56 +390,56 @@ public static partial class GrepWithContextLines
     public static List<LineRange> ContextRanges(IReadOnlyList<string> lines, string target, int linesAround,
                                                 StringComparison comparison = StringComparison.Ordinal)
     {
-        Validate(lines, target, linesAround);
+        // Merges `range` into the tail of an already-sorted list. Callers must
+        // supply ranges in ascending Start order, which every caller here does
+        // for free -- match indices ascend, and Start is index - k.
+        static void Append(List<LineRange> ranges, LineRange range)
+        {
+            if (ranges.Count > 0 && range.Start <= ranges[^1].End + 1)
+            {
+                // Max() is belt and braces: ends ascend with starts here, so the new
+                // end always wins. It costs nothing and makes the helper safe for a
+                // caller whose ranges are sorted but not nested-free.
+                ranges[^1] = new LineRange(ranges[^1].Start, Math.Max(ranges[^1].End, range.End));
+            }
+            else
+            {
+                ranges.Add(range);
+            }
+        }
+
+        // Scans [from, to) and returns the merged windows of the matches found
+        // there. Windows are clamped to the WHOLE document, so a window may overhang
+        // the scanned slice -- that is what makes this usable as a parallel worker.
+        static List<LineRange> ScanRanges(IReadOnlyList<string> lines, string target, int linesAround,
+                                          int from, int to, StringComparison comparison)
+        {
+            var ranges = new List<LineRange>();
+
+            for (int i = from; i < to; i++)
+            {
+                if (Matches(lines[i], target, comparison))
+                    Append(ranges, Window(i, linesAround, lines.Count));
+            }
+
+            return ranges;
+        }
+
+        if (lines is null)
+            throw new ArgumentNullException(nameof(lines));
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+        if (linesAround < 0)
+            throw new ArgumentOutOfRangeException(nameof(linesAround), "Context size cannot be negative.");
         return ScanRanges(lines, target, linesAround, 0, lines.Count, comparison);
-    }
-
-    /// <summary>
-    /// Scans <c>[from, to)</c> and returns the merged windows of the matches found
-    /// there. Windows are clamped to the WHOLE document, so a window may overhang
-    /// the scanned slice -- that is what makes this usable as a parallel worker.
-    /// </summary>
-    private static List<LineRange> ScanRanges(IReadOnlyList<string> lines, string target, int linesAround,
-                                              int from, int to, StringComparison comparison)
-    {
-        var ranges = new List<LineRange>();
-
-        for (int i = from; i < to; i++)
-        {
-            if (Matches(lines[i], target, comparison))
-                Append(ranges, Window(i, linesAround, lines.Count));
-        }
-
-        return ranges;
-    }
-
-    /// <summary>
-    /// Merges <paramref name="range"/> into the tail of an already-sorted list.
-    /// Callers must supply ranges in ascending Start order, which every caller
-    /// here does for free -- match indices ascend, and Start is index - k.
-    /// </summary>
-    private static void Append(List<LineRange> ranges, LineRange range)
-    {
-        if (ranges.Count > 0 && range.Start <= ranges[^1].End + 1)
-        {
-            // Max() is belt and braces: ends ascend with starts here, so the new
-            // end always wins. It costs nothing and makes the helper safe for a
-            // caller whose ranges are sorted but not nested-free.
-            ranges[^1] = new LineRange(ranges[^1].Start, Math.Max(ranges[^1].End, range.End));
-        }
-        else
-        {
-            ranges.Add(range);
-        }
     }
 
     /// <summary>Part 3: same output as <see cref="Grep"/>, without the O(n*k) marking.</summary>
     public static List<string> GrepFast(IReadOnlyList<string> lines, string target, int linesAround,
                                         StringComparison comparison = StringComparison.Ordinal)
-        => Materialize(lines, ContextRanges(lines, target, linesAround, comparison));
-
-    private static List<string> Materialize(IReadOnlyList<string> lines, List<LineRange> ranges)
     {
+        var ranges = ContextRanges(lines, target, linesAround, comparison);
+
         var output = new List<string>(ranges.Sum(r => r.Count));
         foreach (var range in ranges)
         {
@@ -466,7 +466,47 @@ public static partial class GrepWithContextLines
         IReadOnlyList<string> lines, string target, int linesAround,
         int workers = 0, StringComparison comparison = StringComparison.Ordinal)
     {
-        Validate(lines, target, linesAround);
+        // Merges `range` into the tail of an already-sorted list. Callers must
+        // supply ranges in ascending Start order, which every caller here does
+        // for free -- match indices ascend, and Start is index - k.
+        static void Append(List<LineRange> ranges, LineRange range)
+        {
+            if (ranges.Count > 0 && range.Start <= ranges[^1].End + 1)
+            {
+                // Max() is belt and braces: ends ascend with starts here, so the new
+                // end always wins. It costs nothing and makes the helper safe for a
+                // caller whose ranges are sorted but not nested-free.
+                ranges[^1] = new LineRange(ranges[^1].Start, Math.Max(ranges[^1].End, range.End));
+            }
+            else
+            {
+                ranges.Add(range);
+            }
+        }
+
+        // Scans [from, to) and returns the merged windows of the matches found
+        // there. Windows are clamped to the WHOLE document, so a window may overhang
+        // the scanned slice -- that is what makes this usable as a parallel worker.
+        static List<LineRange> ScanRanges(IReadOnlyList<string> lines, string target, int linesAround,
+                                          int from, int to, StringComparison comparison)
+        {
+            var ranges = new List<LineRange>();
+
+            for (int i = from; i < to; i++)
+            {
+                if (Matches(lines[i], target, comparison))
+                    Append(ranges, Window(i, linesAround, lines.Count));
+            }
+
+            return ranges;
+        }
+
+        if (lines is null)
+            throw new ArgumentNullException(nameof(lines));
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+        if (linesAround < 0)
+            throw new ArgumentOutOfRangeException(nameof(linesAround), "Context size cannot be negative.");
 
         int n = lines.Count;
         if (n == 0)
@@ -504,7 +544,17 @@ public static partial class GrepWithContextLines
     public static List<string> GrepParallel(IReadOnlyList<string> lines, string target, int linesAround,
                                             int workers = 0,
                                             StringComparison comparison = StringComparison.Ordinal)
-        => Materialize(lines, ContextRangesParallel(lines, target, linesAround, workers, comparison));
+    {
+        var ranges = ContextRangesParallel(lines, target, linesAround, workers, comparison);
+
+        var output = new List<string>(ranges.Sum(r => r.Count));
+        foreach (var range in ranges)
+        {
+            for (int i = range.Start; i <= range.End; i++)
+                output.Add(lines[i]);
+        }
+        return output;
+    }
 }
 
 // =============================================================================
@@ -513,6 +563,17 @@ public static partial class GrepWithContextLines
 
 public static partial class GrepWithContextLines
 {
+    private static List<string> Materialize(IReadOnlyList<string> lines, List<LineRange> ranges)
+    {
+        var output = new List<string>(ranges.Sum(r => r.Count));
+        foreach (var range in ranges)
+        {
+            for (int i = range.Start; i <= range.End; i++)
+                output.Add(lines[i]);
+        }
+        return output;
+    }
+
     private static readonly string[] Sample =
     {
         "good morning",

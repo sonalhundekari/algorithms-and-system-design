@@ -13,23 +13,19 @@ public class LongestIncreasingSubsequence
         var tails = new List<int>();
         foreach (var num in nums)
         {
-            int pos = LowerBound(tails, num);
+            int lo = 0, hi = tails.Count;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) / 2;
+                if (tails[mid] < num) lo = mid + 1;
+                else hi = mid;
+            }
+
+            int pos = lo;
             if (pos == tails.Count) tails.Add(num);
             else tails[pos] = num;
         }
         return tails.Count;
-    }
-
-    private int LowerBound(List<int> list, int target)
-    {
-        int lo = 0, hi = list.Count;
-        while (lo < hi)
-        {
-            int mid = (lo + hi) / 2;
-            if (list[mid] < target) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
     }
 
     // ---- Tests ----

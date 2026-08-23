@@ -153,23 +153,20 @@ public static class WikiShortestClicks
                 if (!parent.TryAdd(link, uri))          // parent doubles as the visited set
                     continue;
                 if (link == targetUri)
-                    return Rebuild(parent, link);
+                {
+                    var path = new List<string>();
+                    for (string at = link; at is not null; at = parent[at])
+                        path.Add(at);
+
+                    path.Reverse();                     // walked target -> start
+                    return path;
+                }
 
                 frontier.Enqueue(link);
             }
         }
 
         return null;
-    }
-
-    private static List<string> Rebuild(Dictionary<string, string> parent, string end)
-    {
-        var path = new List<string>();
-        for (string at = end; at is not null; at = parent[at])
-            path.Add(at);
-
-        path.Reverse();                                 // walked target -> start
-        return path;
     }
 
     // ---------------------------------------------- Task 2: crawl everything

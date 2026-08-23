@@ -26,92 +26,38 @@
 // prerequisites?" is the single highest-signal clarifying question here. The
 // test block below runs one input through both to show the gap (20 vs 11).
 //
+//
 // The pieces and their costs -- all O(V + E) except the Dijkstra cross-check:
 //
 //   CanFinish / FindOrder      Kahn's BFS                       O(V + E)
 //   TryFindCycle               DFS three-colour, returns a path O(V + E)
 //   TotalTimeBatched           layered BFS, wave = max(times)   O(V + E)
-//   MinimumTime                topological DP, finish[]         O(V + E)
+//   EarliestFinishTimes        topological DP, finish[]         O(V + E)
 //   MinimumTimeAnyPrereq       same DP with min instead of max  O(V + E)
 //   ...Dijkstra                super-source shortest path       O(E log V)
-//   CourseRunner               Kahn through an object API       O(V + E) * retries
+//   Schedule                   Kahn through an object API       O(V + E) * retries
 //
 // EDGE DIRECTION IS THE OTHER TRAP. LeetCode flips it between problems:
 //
 //   LC 207 / 210:  prerequisites[i] = [course, prereq]   "to take course, take prereq first"
 //   LC 2050:       relations[i]     = [prev, next]       and courses are 1-INDEXED
 //
-// Both are supported below, and the conversion is explicit rather than hidden,
-// because silently assuming one is the classic way to fail the whole question
-// while writing perfectly correct topological sort code.
+// Everything here takes the LC 207 layout, [course, prereq]. The single
+// exception is MinimumTime, which is LC 2050 verbatim -- 1-indexed [prev, next]
+// -- and says so in its own build loop. State which layout you are assuming out
+// loud before you start writing; silently assuming one is the classic way to
+// fail the whole question while writing perfectly correct topological sort code.
+//
+// Ids are assumed to be in 0..numCourses-1, as the LC constraints guarantee. The
+// only argument actually checked is the length of `times`, because pairing two
+// parallel arrays is the one thing a caller here really does get wrong.
 
 namespace CodingPatterns.Graphs;
-
-/// <summary>How a caller's edge pairs are laid out. There is no default on purpose.</summary>
-public enum EdgeOrder
-{
-    /// <summary>[course, prerequisite] -- LeetCode 207 / 210.</summary>
-    CourseFirst,
-
-    /// <summary>[prerequisite, course] -- LeetCode 2050 `relations`.</summary>
-    PrereqFirst,
-}
 
 public static class CourseScheduleTiming
 {
     /// <summary>Returned when a cycle makes the schedule impossible.</summary>
     public const int Impossible = -1;
-
-    // ------------------------------------------------------------ graph build
-
-    /// <summary>
-    /// Adjacency from prerequisite -> dependent, plus the in-degree of each
-    /// course (how many prerequisites it is still waiting on). Every algorithm
-    /// below runs off this pair, which is the whole reason Kahn is so short.
-    ///
-    /// Duplicate edges are left alone: they bump the in-degree twice and get
-    /// decremented twice, so Kahn stays correct. Self-loops are left alone too
-    /// -- a course that is its own prerequisite is a legitimate cycle and must
-    /// be REPORTED, not silently dropped.
-    /// </summary>
-    private static (List<int>[] Adj, int[] InDegree) Build(int numCourses, int[][] edges, EdgeOrder order)
-    {
-        if (numCourses < 0)
-            throw new ArgumentOutOfRangeException(nameof(numCourses), "course count cannot be negative");
-
-        var adj = new List<int>[numCourses];
-        for (int i = 0; i < numCourses; i++)
-            adj[i] = new List<int>();
-
-        var inDegree = new int[numCourses];
-
-        foreach (var edge in edges ?? Array.Empty<int[]>())
-        {
-            if (edge is null || edge.Length != 2)
-                throw new ArgumentException("every edge must be a pair", nameof(edges));
-
-            int course = order == EdgeOrder.CourseFirst ? edge[0] : edge[1];
-            int prereq = order == EdgeOrder.CourseFirst ? edge[1] : edge[0];
-
-            if (course < 0 || course >= numCourses || prereq < 0 || prereq >= numCourses)
-                throw new ArgumentOutOfRangeException(
-                    nameof(edges), $"edge [{edge[0]}, {edge[1]}] refers to a course outside 0..{numCourses - 1}");
-
-            adj[prereq].Add(course);        // finishing `prereq` unblocks `course`
-            inDegree[course]++;
-        }
-
-        return (adj, inDegree);
-    }
-
-    private static Queue<int> Sources(int[] inDegree)
-    {
-        var queue = new Queue<int>();
-        for (int i = 0; i < inDegree.Length; i++)
-            if (inDegree[i] == 0)
-                queue.Enqueue(i);
-        return queue;
-    }
 
     // ------------------------------------------------------- LC 207 / LC 210
 
@@ -124,8 +70,37 @@ public static class CourseScheduleTiming
     /// Zero courses is vacuously true, and an empty prerequisite list is true
     /// for any n. Both are legal inputs, both are worth stating out loud.
     /// </summary>
-    public static bool CanFinish(int numCourses, int[][] prerequisites, EdgeOrder order = EdgeOrder.CourseFirst)
-        => FindOrder(numCourses, prerequisites, order).Length == numCourses;
+    public static bool CanFinish(int numCourses, int[][] prerequisites)
+    {
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
+
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);                    // finishing the prereq unblocks the course
+            inDegree[p[0]]++;
+        }
+
+        var queue = new Queue<int>();
+        for (int i = 0; i < numCourses; i++)
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+
+        int finished = 0;
+        while (queue.Count > 0)
+        {
+            int course = queue.Dequeue();
+            finished++;
+
+            foreach (int next in adj[course])
+                if (--inDegree[next] == 0)
+                    queue.Enqueue(next);
+        }
+
+        return finished == numCourses;
+    }
 
     /// <summary>
     /// LC 210. Any valid topological order, or an EMPTY array when a cycle makes
@@ -137,23 +112,36 @@ public static class CourseScheduleTiming
     /// PriorityQueue yields the lexicographically smallest order, which is a
     /// common "and can you make it deterministic?" follow-up.
     /// </summary>
-    public static int[] FindOrder(int numCourses, int[][] prerequisites, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static int[] FindOrder(int numCourses, int[][] prerequisites)
     {
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
-        var queue = Sources(inDegree);
-        var result = new List<int>(numCourses);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
 
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
+
+        var queue = new Queue<int>();
+        for (int i = 0; i < numCourses; i++)
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+
+        var order = new List<int>(numCourses);
         while (queue.Count > 0)
         {
             int course = queue.Dequeue();
-            result.Add(course);
+            order.Add(course);
 
             foreach (int next in adj[course])
                 if (--inDegree[next] == 0)
                     queue.Enqueue(next);
         }
 
-        return result.Count == numCourses ? result.ToArray() : Array.Empty<int>();
+        return order.Count == numCourses ? order.ToArray() : Array.Empty<int>();
     }
 
     /// <summary>
@@ -167,13 +155,20 @@ public static class CourseScheduleTiming
     /// The returned path starts and ends at the same course, e.g. [1, 2, 1].
     /// Iterative rather than recursive so a 2000-node chain cannot blow the
     /// stack -- worth mentioning even when the constraints make it moot.
+    ///
+    /// No in-degree array here: DFS only ever walks forward along edges.
     /// </summary>
-    public static bool TryFindCycle(
-        int numCourses, int[][] prerequisites, out List<int> cycle, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static bool TryFindCycle(int numCourses, int[][] prerequisites, out List<int> cycle)
     {
         const int White = 0, Grey = 1, Black = 2;
 
-        var (adj, _) = Build(numCourses, prerequisites, order);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
+
+        foreach (var p in prerequisites)
+            adj[p[1]].Add(p[0]);
+
         var colour = new int[numCourses];
         var path = new List<int>();                 // the current grey stack, in order
         cycle = new List<int>();
@@ -236,18 +231,18 @@ public static class CourseScheduleTiming
     //
     // With every duration 1 that collapses to "number of waves", which is the
     // BFS depth from the in-degree-0 frontier -- follow-up 1 is just follow-up 2
-    // with a uniform times array, so there is only one function here.
+    // with a uniform times array.
 
     /// <summary>
     /// Follow-up 1: every course takes one unit. Total wall clock is the number
     /// of layered waves, i.e. the length of the longest prerequisite chain.
     /// <see cref="Impossible"/> on a cycle.
     /// </summary>
-    public static long TotalTimeUniform(int numCourses, int[][] prerequisites, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static long TotalTimeUniform(int numCourses, int[][] prerequisites)
     {
         var ones = new int[numCourses];
         Array.Fill(ones, 1);
-        return TotalTimeBatched(numCourses, prerequisites, ones, order);
+        return TotalTimeBatched(numCourses, prerequisites, ones);
     }
 
     /// <summary>
@@ -262,13 +257,26 @@ public static class CourseScheduleTiming
     ///
     /// Returns <see cref="Impossible"/> when a cycle leaves courses unfinished.
     /// </summary>
-    public static long TotalTimeBatched(
-        int numCourses, int[][] prerequisites, int[] times, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static long TotalTimeBatched(int numCourses, int[][] prerequisites, int[] times)
     {
-        ValidateTimes(numCourses, times);
+        if (times is null || times.Length != numCourses)
+            throw new ArgumentException($"times must hold exactly {numCourses} durations", nameof(times));
 
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
-        var queue = Sources(inDegree);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
+
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
+
+        var queue = new Queue<int>();
+        for (int i = 0; i < numCourses; i++)
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
 
         long total = 0;
         int finished = 0;
@@ -295,13 +303,29 @@ public static class CourseScheduleTiming
         return finished == numCourses ? total : Impossible;
     }
 
-    /// <summary>Which courses run in which wave -- the schedule behind <see cref="TotalTimeBatched"/>.</summary>
-    public static List<List<int>> Waves(int numCourses, int[][] prerequisites, EdgeOrder order = EdgeOrder.CourseFirst)
+    /// <summary>
+    /// Which courses run in which wave -- the schedule behind
+    /// <see cref="TotalTimeBatched"/>. Fewer courses than n means a cycle.
+    /// </summary>
+    public static List<List<int>> Waves(int numCourses, int[][] prerequisites)
     {
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
-        var queue = Sources(inDegree);
-        var waves = new List<List<int>>();
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
 
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
+
+        var queue = new Queue<int>();
+        for (int i = 0; i < numCourses; i++)
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+
+        var waves = new List<List<int>>();
         while (queue.Count > 0)
         {
             int size = queue.Count;
@@ -320,7 +344,7 @@ public static class CourseScheduleTiming
             waves.Add(wave);
         }
 
-        return waves;                               // fewer courses than n => cycle
+        return waves;
     }
 
     // ------------------------------- LC 2050: earliest finish, no global barrier
@@ -338,58 +362,92 @@ public static class CourseScheduleTiming
     // fuse into one loop.
 
     /// <summary>
-    /// LC 2050 verbatim: courses are 1-indexed in <paramref name="relations"/>
-    /// (= [prev, next]) while <paramref name="time"/> is 0-indexed, so
-    /// time[i] belongs to course i + 1. This wrapper does the shift once, in one
-    /// place, instead of sprinkling ±1 through the algorithm.
+    /// LC 2050 verbatim, written exactly as the site hands it to you: courses
+    /// are 1-indexed in <paramref name="relations"/> (= [prev, next]) while
+    /// <paramref name="time"/> is 0-indexed, so time[i] belongs to course i + 1.
+    /// The -1 lives in the build loop and nowhere else.
+    ///
+    /// Returns <see cref="Impossible"/> on a cycle, which LC's constraints rule
+    /// out but an interviewer will not.
     /// </summary>
     public static long MinimumTime(int n, int[][] relations, int[] time)
     {
-        var zeroBased = new int[relations?.Length ?? 0][];
-        for (int i = 0; i < zeroBased.Length; i++)
-        {
-            if (relations[i] is null || relations[i].Length != 2)
-                throw new ArgumentException("every relation must be a pair", nameof(relations));
+        if (time is null || time.Length != n)
+            throw new ArgumentException($"time must hold exactly {n} durations", nameof(time));
 
-            zeroBased[i] = new[] { relations[i][0] - 1, relations[i][1] - 1 };
+        var adj = new List<int>[n];
+        for (int i = 0; i < n; i++)
+            adj[i] = new List<int>();
+
+        var inDegree = new int[n];
+        foreach (var r in relations)
+        {
+            int prev = r[0] - 1, next = r[1] - 1;   // 1-indexed input, 0-indexed arrays
+            adj[prev].Add(next);
+            inDegree[next]++;
         }
 
-        return EarliestCompletion(n, zeroBased, time, EdgeOrder.PrereqFirst);
-    }
+        var queue = new Queue<int>();
+        var finish = new long[n];
+        for (int i = 0; i < n; i++)
+        {
+            finish[i] = time[i];                    // no prerequisites yet seen: start at 0
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+        }
 
-    /// <summary>
-    /// Topological DP over earliest finish times, 0-indexed. Returns
-    /// <see cref="Impossible"/> on a cycle.
-    /// </summary>
-    public static long EarliestCompletion(
-        int numCourses, int[][] prerequisites, int[] times, EdgeOrder order = EdgeOrder.CourseFirst)
-    {
-        var finish = EarliestFinishTimes(numCourses, prerequisites, times, order);
-        if (finish is null)
-            return Impossible;
-
+        int done = 0;
         long answer = 0;
-        foreach (long f in finish)
-            answer = Math.Max(answer, f);
-        return answer;                              // 0 courses -> 0
+
+        while (queue.Count > 0)
+        {
+            int course = queue.Dequeue();
+            done++;
+            answer = Math.Max(answer, finish[course]);
+
+            foreach (int next in adj[course])
+            {
+                // `course` is final, so it is a settled lower bound on next's start.
+                finish[next] = Math.Max(finish[next], finish[course] + time[next]);
+                if (--inDegree[next] == 0)
+                    queue.Enqueue(next);
+            }
+        }
+
+        return done == n ? answer : Impossible;
     }
 
     /// <summary>
-    /// Per-course earliest finish time, or null on a cycle. Useful on its own:
-    /// the critical path is recovered by walking back from the argmax through
-    /// whichever prerequisite achieved the max.
+    /// Per-course earliest finish time under the same model, 0-indexed and
+    /// taking the LC 207 [course, prereq] layout. Returns null on a cycle.
+    ///
+    /// Useful on its own: the critical path is recovered by walking back from
+    /// the argmax through whichever prerequisite achieved the max.
     /// </summary>
-    public static long[] EarliestFinishTimes(
-        int numCourses, int[][] prerequisites, int[] times, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static long[] EarliestFinishTimes(int numCourses, int[][] prerequisites, int[] times)
     {
-        ValidateTimes(numCourses, times);
+        if (times is null || times.Length != numCourses)
+            throw new ArgumentException($"times must hold exactly {numCourses} durations", nameof(times));
 
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
-        var queue = Sources(inDegree);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
 
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
+
+        var queue = new Queue<int>();
         var finish = new long[numCourses];
         for (int i = 0; i < numCourses; i++)
-            finish[i] = times[i];                   // no prerequisites yet seen: start at 0
+        {
+            finish[i] = times[i];
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+        }
 
         int done = 0;
         while (queue.Count > 0)
@@ -399,7 +457,6 @@ public static class CourseScheduleTiming
 
             foreach (int next in adj[course])
             {
-                // `course` is final, so it is a settled lower bound on next's start.
                 finish[next] = Math.Max(finish[next], finish[course] + times[next]);
                 if (--inDegree[next] == 0)
                     queue.Enqueue(next);
@@ -407,6 +464,22 @@ public static class CourseScheduleTiming
         }
 
         return done == numCourses ? finish : null;
+    }
+
+    /// <summary>
+    /// The makespan under the LC 2050 model, 0-indexed: the largest earliest
+    /// finish time. <see cref="Impossible"/> on a cycle, 0 for zero courses.
+    /// </summary>
+    public static long EarliestCompletion(int numCourses, int[][] prerequisites, int[] times)
+    {
+        var finish = EarliestFinishTimes(numCourses, prerequisites, times);
+        if (finish is null)
+            return Impossible;
+
+        long answer = 0;
+        foreach (long f in finish)
+            answer = Math.Max(answer, f);
+        return answer;
     }
 
     // ------------------------------ follow-up 3: ANY one prerequisite suffices
@@ -444,18 +517,31 @@ public static class CourseScheduleTiming
     /// <see cref="MinimumTimeAnyPrereqDijkstra"/>). Prefer this when the input is
     /// promised acyclic; it is O(V + E) with no heap.
     /// </summary>
-    public static long MinimumTimeAnyPrereq(
-        int numCourses, int[][] prerequisites, int[] times, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static long MinimumTimeAnyPrereq(int numCourses, int[][] prerequisites, int[] times)
     {
-        ValidateTimes(numCourses, times);
+        if (times is null || times.Length != numCourses)
+            throw new ArgumentException($"times must hold exactly {numCourses} durations", nameof(times));
 
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
-        var queue = Sources(inDegree);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
+
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
 
         const long Inf = long.MaxValue / 4;
+        var queue = new Queue<int>();
         var start = new long[numCourses];
         for (int i = 0; i < numCourses; i++)
+        {
             start[i] = inDegree[i] == 0 ? 0 : Inf;  // roots go immediately
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+        }
 
         int done = 0;
         long answer = 0;
@@ -493,12 +579,21 @@ public static class CourseScheduleTiming
     /// Lazy deletion (skip a popped entry whose key is stale) rather than
     /// decrease-key, which C#'s PriorityQueue does not offer. O(E log V).
     /// </summary>
-    public static long MinimumTimeAnyPrereqDijkstra(
-        int numCourses, int[][] prerequisites, int[] times, EdgeOrder order = EdgeOrder.CourseFirst)
+    public static long MinimumTimeAnyPrereqDijkstra(int numCourses, int[][] prerequisites, int[] times)
     {
-        ValidateTimes(numCourses, times);
+        if (times is null || times.Length != numCourses)
+            throw new ArgumentException($"times must hold exactly {numCourses} durations", nameof(times));
 
-        var (adj, inDegree) = Build(numCourses, prerequisites, order);
+        var adj = new List<int>[numCourses];
+        for (int i = 0; i < numCourses; i++)
+            adj[i] = new List<int>();
+
+        var inDegree = new int[numCourses];
+        foreach (var p in prerequisites)
+        {
+            adj[p[1]].Add(p[0]);
+            inDegree[p[0]]++;
+        }
 
         const long Inf = long.MaxValue / 4;
         var start = new long[numCourses];
@@ -533,18 +628,6 @@ public static class CourseScheduleTiming
         }
 
         return settled == numCourses ? answer : Impossible;
-    }
-
-    private static void ValidateTimes(int numCourses, int[] times)
-    {
-        if (numCourses < 0)
-            throw new ArgumentOutOfRangeException(nameof(numCourses), "course count cannot be negative");
-        if ((times?.Length ?? 0) != numCourses)
-            throw new ArgumentException($"times must hold exactly {numCourses} durations", nameof(times));
-
-        for (int i = 0; i < numCourses; i++)
-            if (times[i] < 0)
-                throw new ArgumentException($"course {i} has negative duration {times[i]}", nameof(times));
     }
 
     // ------------------------------------------------------- the OOP wrapper
@@ -604,6 +687,8 @@ public static class CourseScheduleTiming
 
         run ??= _ => true;
 
+        // Ids are arbitrary ints rather than 0..n-1, so the arrays above become
+        // dictionaries. Same Kahn, one indirection deeper.
         var byId = new Dictionary<int, Course>();
         foreach (var course in courses)
             if (!byId.TryAdd(course.Id, course))
@@ -679,15 +764,6 @@ public static class CourseScheduleTiming
         Console.WriteLine($"  self-loop [[1,1]]: {CanFinish(2, new[] { new[] { 1, 1 } })} (expect False)");
         Console.WriteLine($"  duplicate edge [[1,0],[1,0]]: {CanFinish(2, new[] { new[] { 1, 0 }, new[] { 1, 0 } })} (expect True)");
 
-        try
-        {
-            CanFinish(2, new[] { new[] { 5, 0 } });
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            Console.WriteLine($"  out-of-range course rejected: {ex.Message.Split(" (Parameter")[0]}");
-        }
-
         Console.WriteLine();
         Console.WriteLine("== cycle detection that names the cycle ==");
 
@@ -717,14 +793,17 @@ public static class CourseScheduleTiming
         Console.WriteLine();
         Console.WriteLine("== follow-up 2: variable durations, batch model ==");
 
-        // The prompt's example, 1-indexed: relations 1->2 and 3->4, times 1,10,10,1.
-        // Wave {1,3} costs max(1,10) = 10; wave {2,4} costs max(10,1) = 10.
+        // The prompt's example: 1->2 and 3->4 with times 1,10,10,1. Written twice
+        // because the two models take different layouts -- [course, prereq]
+        // 0-indexed for the batch model, LC 2050's 1-indexed [prev, next] for
+        // MinimumTime. Same graph either way.
+        // Wave {0,2} costs max(1,10) = 10; wave {1,3} costs max(10,1) = 10.
+        var promptBatched = new[] { new[] { 1, 0 }, new[] { 3, 2 } };
         var promptRelations = new[] { new[] { 1, 2 }, new[] { 3, 4 } };
-        var promptZero = new[] { new[] { 0, 1 }, new[] { 2, 3 } };
         var promptTimes = new[] { 1, 10, 10, 1 };
 
-        Console.WriteLine("  prerequisites [[1,2],[3,4]], times [1,10,10,1]");
-        Console.WriteLine($"    batched (barrier)  -> {TotalTimeBatched(4, promptZero, promptTimes, EdgeOrder.PrereqFirst)} (expect 20)");
+        Console.WriteLine("  prerequisites 1->2 and 3->4, times [1,10,10,1]");
+        Console.WriteLine($"    batched (barrier)    -> {TotalTimeBatched(4, promptBatched, promptTimes)} (expect 20)");
         Console.WriteLine($"    LC 2050 (no barrier) -> {MinimumTime(4, promptRelations, promptTimes)} (expect 11)");
         Console.WriteLine("    ^ SAME INPUT, different models. Ask which one before coding.");
 
@@ -754,6 +833,8 @@ public static class CourseScheduleTiming
         var finishes = EarliestFinishTimes(4, diamond, new[] { 2, 5, 1, 3 });
         Console.WriteLine($"  diamond finishes: [{string.Join(", ", finishes)}] (expect 2, 7, 3, 10)");
         Console.WriteLine($"  cycle -> {EarliestCompletion(2, cycle2, new[] { 1, 1 })} (expect -1)");
+        Console.WriteLine($"  MinimumTime agrees with EarliestCompletion on the prompt input: "
+            + $"{MinimumTime(4, promptRelations, promptTimes) == EarliestCompletion(4, promptBatched, promptTimes)}");
 
         Console.WriteLine();
         Console.WriteLine("== follow-up 3: ANY one prerequisite is enough ==");
@@ -824,7 +905,7 @@ public static class CourseScheduleTiming
 
         var rng = new Random(2050);
         bool ordersValid = true, uniformAgrees = true, dpAgrees = true, anyAgrees = true, dijkstraAgrees = true;
-        bool batchNeverUnder = true, cyclesRejected = true, dijkstraOnCycles = true;
+        bool lcAgrees = true, batchNeverUnder = true, cyclesRejected = true, dijkstraOnCycles = true;
         int cyclesSeen = 0;
 
         for (int trial = 0; trial < 4000; trial++)
@@ -863,15 +944,20 @@ public static class CourseScheduleTiming
             // 3. Kahn's DP vs a plain recursive definition.
             dpAgrees &= EarliestCompletion(n, dag, times) == BruteForceFinish(n, dag, times, useMax: true);
 
-            // 4. The ANY variant, both ways, against the recursion.
+            // 4. The 1-indexed LC 2050 entry point computes the same thing as the
+            //    0-indexed one -- i.e. the ±1 in its build loop is right.
+            var relations = dag.Select(e => new[] { e[1] + 1, e[0] + 1 }).ToArray();
+            lcAgrees &= MinimumTime(n, relations, times) == EarliestCompletion(n, dag, times);
+
+            // 5. The ANY variant, both ways, against the recursion.
             long anyTopo = MinimumTimeAnyPrereq(n, dag, times);
             anyAgrees &= anyTopo == BruteForceFinish(n, dag, times, useMax: false);
             dijkstraAgrees &= MinimumTimeAnyPrereqDijkstra(n, dag, times) == anyTopo;
 
-            // 5. The barrier can only ever cost more than no barrier.
+            // 6. The barrier can only ever cost more than no barrier.
             batchNeverUnder &= TotalTimeBatched(n, dag, times) >= EarliestCompletion(n, dag, times);
 
-            // 6. Add one back edge. Everything that requires acyclicity must
+            // 7. Add one back edge. Everything that requires acyclicity must
             //    report impossible -- but Dijkstra deliberately must NOT, because
             //    a cycle fed from outside is still schedulable under ANY
             //    semantics. It is checked against Bellman-Ford instead, which
@@ -897,6 +983,7 @@ public static class CourseScheduleTiming
         Console.WriteLine($"  4,000 random DAGs, every topological order valid:            {ordersValid}");
         Console.WriteLine($"  uniform durations: layered BFS == earliest-finish DP:        {uniformAgrees}");
         Console.WriteLine($"  earliest-finish DP == recursive definition:                  {dpAgrees}");
+        Console.WriteLine($"  LC 2050 (1-indexed) == EarliestCompletion (0-indexed):       {lcAgrees}");
         Console.WriteLine($"  ANY-prerequisite DP == recursive definition:                 {anyAgrees}");
         Console.WriteLine($"  ANY-prerequisite DP == Dijkstra (on DAGs):                   {dijkstraAgrees}");
         Console.WriteLine($"  batch total >= no-barrier total, always:                     {batchNeverUnder}");
@@ -1006,6 +1093,13 @@ public static class CourseScheduleTiming
 //     topological order (Pearce-Kelly): on inserting u -> v, if u already
 //     precedes v nothing changes, otherwise reorder only the affected window,
 //     and a cycle shows up when v can reach u.
+//
+// "The input uses the other edge order."
+//     Every method here reads prerequisites[i] as [course, prereq]. If the
+//     interviewer's pairs are [prereq, course], flip the two indices in that
+//     method's build loop -- adj[p[0]].Add(p[1]) and inDegree[p[1]]++ -- and
+//     nothing else changes. Say which layout you are assuming before you write
+//     the loop.
 //
 // "n is 2000 and prerequisites is 5000" -- the LC 210 constraints.
 //     Kahn at O(V + E) is ~7k operations. Even the O(V * E) Bellman-Ford-style

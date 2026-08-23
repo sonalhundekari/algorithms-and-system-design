@@ -89,64 +89,64 @@ public class OriginalStringExists
 
     public bool PossiblyEquals(string s1, string s2)
     {
+        static bool Solve(string s1, string s2, int i, int j, int diff, byte[,,] memo)
+        {
+            // Both encodings consumed: they describe the same original iff neither
+            // still owes the other any characters.
+            if (i == s1.Length && j == s2.Length) return diff == 0;
+            if (Math.Abs(diff) > MaxDiff) return false;   // unreachable in practice
+
+            var slot = diff + MaxDiff;
+            if (memo[i, j, slot] != 0) return memo[i, j, slot] == 1;
+
+            var ok = false;
+
+            if (i < s1.Length && char.IsDigit(s1[i]))
+            {
+                // Every reading of the digit run starting at i: consume one more
+                // digit into the number each time and recurse. s1 moves ahead by v.
+                var value = 0;
+                for (var k = i; k < s1.Length && k < i + 3 && char.IsDigit(s1[k]); k++)
+                {
+                    value = value * 10 + (s1[k] - '0');
+                    if (Solve(s1, s2, k + 1, j, diff + value, memo)) { ok = true; break; }
+                }
+            }
+            else if (j < s2.Length && char.IsDigit(s2[j]))
+            {
+                // Mirror image; s2 moves ahead, so diff goes down.
+                var value = 0;
+                for (var k = j; k < s2.Length && k < j + 3 && char.IsDigit(s2[k]); k++)
+                {
+                    value = value * 10 + (s2[k] - '0');
+                    if (Solve(s1, s2, i, k + 1, diff - value, memo)) { ok = true; break; }
+                }
+            }
+            else if (diff == 0)
+            {
+                // Neither side has an outstanding balance, so these two literals sit
+                // at the SAME index of the original and must be identical.
+                if (i < s1.Length && j < s2.Length && s1[i] == s2[j])
+                    ok = Solve(s1, s2, i + 1, j + 1, 0, memo);
+            }
+            else if (diff > 0)
+            {
+                // s1 is ahead: one of its wildcard slots swallows s2's next letter,
+                // whatever that letter is. No comparison happens here.
+                if (j < s2.Length) ok = Solve(s1, s2, i, j + 1, diff - 1, memo);
+            }
+            else
+            {
+                if (i < s1.Length) ok = Solve(s1, s2, i + 1, j, diff + 1, memo);
+            }
+
+            memo[i, j, slot] = (byte)(ok ? 1 : 2);
+            return ok;
+        }
+
         // memo[i, j, diff + MaxDiff]: 0 = unknown, 1 = true, 2 = false.
         var memo = new byte[s1.Length + 1, s2.Length + 1, 2 * MaxDiff + 1];
         return Solve(s1, s2, 0, 0, 0, memo);
-    }
-
-    private static bool Solve(string s1, string s2, int i, int j, int diff, byte[,,] memo)
-    {
-        // Both encodings consumed: they describe the same original iff neither
-        // still owes the other any characters.
-        if (i == s1.Length && j == s2.Length) return diff == 0;
-        if (Math.Abs(diff) > MaxDiff) return false;   // unreachable in practice
-
-        var slot = diff + MaxDiff;
-        if (memo[i, j, slot] != 0) return memo[i, j, slot] == 1;
-
-        var ok = false;
-
-        if (i < s1.Length && char.IsDigit(s1[i]))
-        {
-            // Every reading of the digit run starting at i: consume one more
-            // digit into the number each time and recurse. s1 moves ahead by v.
-            var value = 0;
-            for (var k = i; k < s1.Length && k < i + 3 && char.IsDigit(s1[k]); k++)
-            {
-                value = value * 10 + (s1[k] - '0');
-                if (Solve(s1, s2, k + 1, j, diff + value, memo)) { ok = true; break; }
-            }
-        }
-        else if (j < s2.Length && char.IsDigit(s2[j]))
-        {
-            // Mirror image; s2 moves ahead, so diff goes down.
-            var value = 0;
-            for (var k = j; k < s2.Length && k < j + 3 && char.IsDigit(s2[k]); k++)
-            {
-                value = value * 10 + (s2[k] - '0');
-                if (Solve(s1, s2, i, k + 1, diff - value, memo)) { ok = true; break; }
-            }
-        }
-        else if (diff == 0)
-        {
-            // Neither side has an outstanding balance, so these two literals sit
-            // at the SAME index of the original and must be identical.
-            if (i < s1.Length && j < s2.Length && s1[i] == s2[j])
-                ok = Solve(s1, s2, i + 1, j + 1, 0, memo);
-        }
-        else if (diff > 0)
-        {
-            // s1 is ahead: one of its wildcard slots swallows s2's next letter,
-            // whatever that letter is. No comparison happens here.
-            if (j < s2.Length) ok = Solve(s1, s2, i, j + 1, diff - 1, memo);
-        }
-        else
-        {
-            if (i < s1.Length) ok = Solve(s1, s2, i + 1, j, diff + 1, memo);
-        }
-
-        memo[i, j, slot] = (byte)(ok ? 1 : 2);
-        return ok;
     }
 
     // ---- Tests ----

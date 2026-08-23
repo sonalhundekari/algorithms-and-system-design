@@ -149,7 +149,6 @@ public class RecipeContiguousSubsequence
 {
     // Ordinal on purpose -- ingredient names are identifiers, not prose, and
     // culture-aware comparison would make matching machine-dependent.
-    private static bool Eq(string a, string b) => string.Equals(a, b, StringComparison.Ordinal);
 
     // =====================================================================
     // Part 0 -- the definition, written out. The reference every other
@@ -165,7 +164,7 @@ public class RecipeContiguousSubsequence
         for (int start = 0; start + m <= n; start++)
         {
             int j = 0;
-            while (j < m && Eq(ingredients[start + j], recipe[j])) j++;
+            while (j < m && string.Equals(ingredients[start + j], recipe[j], StringComparison.Ordinal)) j++;
             if (j == m) return start;
         }
         return -1;
@@ -191,7 +190,7 @@ public class RecipeContiguousSubsequence
         for (int start = 0; start + m <= n; start++)
         {
             int j = 0;
-            while (j < m && Eq(ingredients[start + j], recipe[j])) j++;
+            while (j < m && string.Equals(ingredients[start + j], recipe[j], StringComparison.Ordinal)) j++;
             if (j == m) starts.Add(start);
         }
         return starts;
@@ -211,9 +210,9 @@ public class RecipeContiguousSubsequence
         int k = 0;                                   // length of the current border
         for (int i = 1; i < recipe.Count; i++)
         {
-            while (k > 0 && !Eq(recipe[i], recipe[k]))
+            while (k > 0 && !string.Equals(recipe[i], recipe[k], StringComparison.Ordinal))
                 k = fail[k - 1];                     // shrink to the next-longest border
-            if (Eq(recipe[i], recipe[k])) k++;
+            if (string.Equals(recipe[i], recipe[k], StringComparison.Ordinal)) k++;
             fail[i] = k;
         }
         return fail;
@@ -229,9 +228,9 @@ public class RecipeContiguousSubsequence
         int j = 0;                                   // matched prefix length so far
         for (int i = 0; i < n; i++)
         {
-            while (j > 0 && !Eq(ingredients[i], recipe[j]))
+            while (j > 0 && !string.Equals(ingredients[i], recipe[j], StringComparison.Ordinal))
                 j = fail[j - 1];                     // slide the recipe, NOT the text
-            if (Eq(ingredients[i], recipe[j])) j++;
+            if (string.Equals(ingredients[i], recipe[j], StringComparison.Ordinal)) j++;
             if (j == m) return i - m + 1;
         }
         return -1;
@@ -247,24 +246,6 @@ public class RecipeContiguousSubsequence
 
     private const ulong Mod = (1UL << 61) - 1;       // Mersenne prime: reduction is shifts
 
-    private static ulong AddMod(ulong a, ulong b)
-    {
-        ulong s = a + b;
-        return s >= Mod ? s - Mod : s;
-    }
-
-    private static ulong SubMod(ulong a, ulong b) => AddMod(a, Mod - b);
-
-    // a*b mod (2^61-1) via the 128-bit product. Both inputs are < 2^61, so the
-    // high half is < 2^58 and `hi << 3` cannot lose bits.
-    private static ulong MulMod(ulong a, ulong b)
-    {
-        ulong hi = Math.BigMul(a, b, out ulong lo);
-        ulong low61 = lo & Mod;
-        ulong high = (hi << 3) | (lo >> 61);         // 2^61 == 1 (mod 2^61-1)
-        return AddMod(low61, high);
-    }
-
     /// <summary>
     /// Answers every recipe in one construction. Returns a bool per recipe, in
     /// the order given. O(N * distinct-lengths + total recipe length).
@@ -274,6 +255,24 @@ public class RecipeContiguousSubsequence
         IReadOnlyList<IReadOnlyList<string>> recipes,
         int seed = 20260811)
     {
+        static ulong AddMod(ulong a, ulong b)
+        {
+            ulong s = a + b;
+            return s >= Mod ? s - Mod : s;
+        }
+
+        static ulong SubMod(ulong a, ulong b) => AddMod(a, Mod - b);
+
+        // a*b mod (2^61-1) via the 128-bit product. Both inputs are < 2^61, so the
+        // high half is < 2^58 and `hi << 3` cannot lose bits.
+        static ulong MulMod(ulong a, ulong b)
+        {
+            ulong hi = Math.BigMul(a, b, out ulong lo);
+            ulong low61 = lo & Mod;
+            ulong high = (hi << 3) | (lo >> 61);         // 2^61 == 1 (mod 2^61-1)
+            return AddMod(low61, high);
+        }
+
         int n = ingredients.Count;
         var answer = new bool[recipes.Count];
 
@@ -349,7 +348,7 @@ public class RecipeContiguousSubsequence
                 foreach (int start in candidates)
                 {
                     int j = 0;
-                    while (j < length && Eq(ingredients[start + j], recipe[j])) j++;
+                    while (j < length && string.Equals(ingredients[start + j], recipe[j], StringComparison.Ordinal)) j++;
                     if (j == length) { answer[index] = true; break; }
                 }
             }
@@ -373,7 +372,7 @@ public class RecipeContiguousSubsequence
         int j = 0;                                   // cursor into the recipe
         while (i < n)
         {
-            if (Eq(ingredients[i], recipe[j]))
+            if (string.Equals(ingredients[i], recipe[j], StringComparison.Ordinal))
             {
                 i++; j++;
                 if (j == m) return i - m;
@@ -404,7 +403,7 @@ public class RecipeContiguousSubsequence
         int i = 0, j = 0;
         while (i < n)
         {
-            if (Eq(ingredients[i], recipe[j]))
+            if (string.Equals(ingredients[i], recipe[j], StringComparison.Ordinal))
             {
                 i++; j++;
                 if (j == m) return i - m;
@@ -463,9 +462,9 @@ public class RecipeContiguousSubsequence
                 if (recipe.Count == 0) continue;
 
                 int j = _matched[r];
-                while (j > 0 && !Eq(ingredient, recipe[j]))
+                while (j > 0 && !string.Equals(ingredient, recipe[j], StringComparison.Ordinal))
                     j = _fail[r][j - 1];             // fall back, do NOT reset to 0
-                if (Eq(ingredient, recipe[j])) j++;
+                if (string.Equals(ingredient, recipe[j], StringComparison.Ordinal)) j++;
 
                 if (j == recipe.Count)
                 {
